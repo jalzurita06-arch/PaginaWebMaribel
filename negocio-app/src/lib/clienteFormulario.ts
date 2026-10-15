@@ -70,7 +70,7 @@ export function validarNuevoCliente(entrada: {
     ok: true,
     datos: {
       codigo: validacion.data.codigo,
-      nombre: validacion.data.nombre || null,
+      nombre: nombreListo(validacion.data.nombre),
       telefono: validacion.data.telefono,
       abonoInicial: abono.monto,
     },
@@ -89,7 +89,7 @@ export function validarEdicionCliente(entrada: {
     ok: true,
     datos: {
       codigo: validacion.data.codigo,
-      nombre: validacion.data.nombre || null,
+      nombre: nombreListo(validacion.data.nombre),
       telefono: validacion.data.telefono,
     },
   }
@@ -175,6 +175,30 @@ function leerAbono(
   const monto = redondear2(Number(normalizado))
   if (monto <= 0) return { ok: false, mensaje: 'El abono inicial debe ser mayor que 0.' }
   return { ok: true, monto }
+}
+
+/** Primera letra de cada palabra en mayúscula y el resto en minúscula: Joshua Lozada. */
+export function capitalizarNombre(valor: string): string {
+  const conservaEspacio = /\s$/.test(valor)
+  const limpio = valor.trim().replace(/\s+/g, ' ')
+  if (!limpio) return conservaEspacio ? ' ' : ''
+
+  const listo = limpio
+    .split(' ')
+    .map((palabra) => palabra.split('-').map(capitalizarPalabra).join('-'))
+    .join(' ')
+  return conservaEspacio ? `${listo} ` : listo
+}
+
+function capitalizarPalabra(palabra: string): string {
+  const minusculas = palabra.toLocaleLowerCase('es')
+  const primera = minusculas.charAt(0)
+  if (!primera) return ''
+  return primera.toLocaleUpperCase('es') + minusculas.slice(1)
+}
+
+function nombreListo(valor: string): string | null {
+  return capitalizarNombre(valor).trim() || null
 }
 
 function erroresDe(error: z.ZodError): ErroresCliente {

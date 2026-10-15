@@ -4,6 +4,7 @@ import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { Aviso } from './Aviso.tsx'
 import {
+  capitalizarNombre,
   validarEdicionCliente,
   validarNuevoCliente,
   type DatosEdicionCliente,
@@ -170,10 +171,11 @@ export function FormularioCliente({
             name="nombre"
             value={nombre}
             autoComplete="name"
+            autoCapitalize="words"
             aria-invalid={errores.nombre ? true : undefined}
             aria-describedby={errores.nombre ? idErrorNombre : undefined}
             onChange={(evento) => {
-              setNombre(evento.target.value)
+              setNombre(capitalizarNombre(evento.target.value))
               setErrores((actual) => ({ ...actual, nombre: undefined }))
             }}
             className={campo}

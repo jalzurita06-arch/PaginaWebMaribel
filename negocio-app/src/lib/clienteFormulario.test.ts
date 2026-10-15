@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { validarAbono, validarEdicionCliente, validarNuevoCliente } from './clienteFormulario.ts'
+import {
+  capitalizarNombre,
+  validarAbono,
+  validarEdicionCliente,
+  validarNuevoCliente,
+} from './clienteFormulario.ts'
 
 const vacio = { codigo: '', nombre: '', telefono: '', abonoInicial: '' }
 
@@ -8,7 +13,7 @@ describe('validarNuevoCliente', () => {
     expect(
       validarNuevoCliente({
         codigo: '  A12  ',
-        nombre: '  Ana  ',
+        nombre: '  ANA  ',
         telefono: '0991234567',
         abonoInicial: '5,5',
       }),
@@ -19,6 +24,25 @@ describe('validarNuevoCliente', () => {
         nombre: 'Ana',
         telefono: '0991234567',
         abonoInicial: 5.5,
+      },
+    })
+  })
+
+  it('guarda el nombre con cada palabra capitalizada', () => {
+    expect(
+      validarNuevoCliente({
+        codigo: 'K34',
+        nombre: 'joshua lozada',
+        telefono: '0991234567',
+        abonoInicial: '',
+      }),
+    ).toEqual({
+      ok: true,
+      datos: {
+        codigo: 'K34',
+        nombre: 'Joshua Lozada',
+        telefono: '0991234567',
+        abonoInicial: null,
       },
     })
   })
@@ -103,6 +127,15 @@ describe('validarAbono', () => {
       ok: false,
       errores: { monto: 'El abono debe ser mayor que 0.' },
     })
+  })
+})
+
+describe('capitalizarNombre', () => {
+  it('deja la primera letra de cada palabra en mayúscula', () => {
+    expect(capitalizarNombre('joshua')).toBe('Joshua')
+    expect(capitalizarNombre('JOSHUA LOZADA')).toBe('Joshua Lozada')
+    expect(capitalizarNombre('  joshua   lozada  ')).toBe('Joshua Lozada ')
+    expect(capitalizarNombre('maría-josé ñuñez')).toBe('María-José Ñuñez')
   })
 })
 

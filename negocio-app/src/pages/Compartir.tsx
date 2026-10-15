@@ -8,14 +8,14 @@ import { Layout } from '../components/Layout.tsx'
 import { negocio } from '../config/negocio.ts'
 import { secciones } from '../config/secciones.ts'
 import {
+  abrirWhatsAppDeCliente,
   datosBancariosListos,
-  esCelular,
+  detectarCelular,
+  MENSAJE_VENTANA_BLOQUEADA,
   nombreArchivoPedido,
   leerVenta,
   resumenPedido,
   telefonoConPrefijo,
-  textoWhatsApp,
-  urlWhatsApp,
 } from '../lib/compartir.ts'
 import { formatearDolares } from '../lib/dinero.ts'
 import { generarImagen } from '../lib/generarImagen.tsx'
@@ -49,8 +49,9 @@ export function Compartir() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<AvisoEstado | null>(null)
-  const [enlace, setEnlace] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
+  const [imagenLista, setImagenLista] = useState<Blob | null>(null)
+  const [imagenFallida, setImagenFallida] = useState(false)
   const [intento, setIntento] = useState(0)
   const esVenta = textoVenta != null
 
@@ -103,9 +104,38 @@ export function Compartir() {
     }
   }, [clienteId, intento, textoVenta])
 
+  useEffect(() => {
+    if (!cliente || error || cargando) {
+      setImagenLista(null)
+      setImagenFallida(false)
+      return
+    }
+
+    let vigente = true
+    setImagenLista(null)
+    setImagenFallida(false)
+    void generarImagen(cliente.id, esVenta ? items : undefined)
+      .then((blob) => {
+        if (vigente) setImagenLista(blob)
+      })
+      .catch(() => {
+        if (vigente) {
+          setImagenLista(null)
+          setImagenFallida(true)
+        }
+      })
+
+    return () => {
+      vigente = false
+    }
+  }, [cliente, items, esVenta, error, cargando])
+
   const resumen = cliente ? resumenPedido(items, cliente.saldo_favor) : null
   const telefono = cliente ? telefonoConPrefijo(cliente.telefono, negocio.telefonoPrefijo) : ''
   const bancoListo = datosBancariosListos(negocio)
+  const preparandoImagen = Boolean(
+    cliente && resumen && !error && !cargando && !imagenLista && !imagenFallida && !detectarCelular(),
+  )
   const listo = Boolean(cliente && resumen && !error && !cargando && telefono && bancoListo)
   const vuelveAVenta = esVenta || desdeConsulta === 'venta' || desdeEstado === 'venta'
 
@@ -116,7 +146,6 @@ export function Compartir() {
   async function compartir() {
     if (!cliente || ocupado) return
     setAviso(null)
-    setEnlace(null)
 
     if (!bancoListo) {
       setAviso({ tono: 'error', texto: 'Faltan los datos bancarios del negocio. Revísalos antes de compartir.' })
@@ -127,15 +156,32 @@ export function Compartir() {
       return
     }
 
-    const texto = textoWhatsApp(cliente, negocio)
     const archivo = nombreArchivoPedido(cliente.codigo)
+    const venta = esVenta ? items : undefined
     setOcupado(true)
 
     try {
       if (detectarCelular()) {
-        await compartirEnCelular(cliente.id, telefono, texto, archivo, esVenta ? items : undefined, setAviso, setEnlace)
-      } else {
-        await compartirEnComputadora(cliente.id, telefono, texto, archivo, esVenta ? items : undefined, setAviso, setEnlace)
+        const chat = abrirWhatsAppDeCliente(cliente, negocio, negocio.telefonoPrefijo)
+        if (chat.bloqueada) {
+          setAviso({ tono: 'error', texto: MENSAJE_VENTANA_BLOQUEADA })
+        }
+        await compartirEnCelular(cliente.id, archivo, venta, setAviso)
+        return
+      }
+
+      // En PC la imagen se copia con esta pestaña al frente. WhatsApp se abre después.
+      const resultado = await compartirEnComputadora(cliente.id, archivo, venta, imagenLista, setAviso)
+      if (!resultado.ok) return
+
+      const chat = abrirWhatsAppDeCliente(cliente, negocio, negocio.telefonoPrefijo)
+      if (chat.bloqueada) {
+        setAviso({
+          tono: 'error',
+          texto: resultado.copiada
+            ? `${MENSAJE_VENTANA_BLOQUEADA}. La imagen ya está copiada: pégala con Ctrl+V cuando abras WhatsApp.`
+            : MENSAJE_VENTANA_BLOQUEADA,
+        })
       }
     } finally {
       setOcupado(false)
@@ -209,32 +255,20 @@ export function Compartir() {
             ) : null}
 
             <p className="text-sm leading-relaxed text-black/60">
-              Usa el teléfono guardado de este cliente y abre su WhatsApp. En la computadora también copia la imagen
-              para pegarla con Ctrl+V. Compartir no cambia ningún dato.
+              Primero se copia la imagen y después se abre WhatsApp con el mensaje listo. Pégala con Ctrl+V. Compartir no
+              cambia ningún dato.
             </p>
 
             <motion.button
               type="button"
               onClick={() => void compartir()}
-              disabled={!listo || ocupado}
-              whileTap={reducirMovimiento || !listo || ocupado ? undefined : toque}
+              disabled={!listo || ocupado || preparandoImagen}
+              whileTap={reducirMovimiento || !listo || ocupado || preparandoImagen ? undefined : toque}
               transition={{ duration: 0.15 }}
               className={`${boton} bg-black text-white`}
             >
-              {ocupado ? 'Preparando imagen…' : 'Compartir por WhatsApp'}
+              {ocupado || preparandoImagen ? 'Preparando imagen…' : 'Compartir por WhatsApp'}
             </motion.button>
-
-            {enlace ? (
-              <a
-                href={enlace}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={boton}
-                style={{ backgroundColor: acento }}
-              >
-                Abrir WhatsApp
-              </a>
-            ) : null}
 
             <Enlace
               to="/"
@@ -260,23 +294,11 @@ function Monto({ etiqueta, valor }: { etiqueta: string; valor: number }) {
   )
 }
 
-function detectarCelular(): boolean {
-  const nav = navigator as Navigator & { userAgentData?: { mobile?: boolean } }
-  if (typeof nav.userAgentData?.mobile === 'boolean') return nav.userAgentData.mobile
-  return esCelular(nav.userAgent, {
-    plataforma: nav.platform,
-    puntosTactiles: nav.maxTouchPoints,
-  })
-}
-
 async function compartirEnCelular(
   clienteId: string,
-  telefono: string,
-  texto: string,
   archivo: string,
   venta: ItemCanasta[] | undefined,
   setAviso: (aviso: AvisoEstado) => void,
-  setEnlace: (url: string | null) => void,
 ) {
   let blob: Blob
   try {
@@ -288,91 +310,82 @@ async function compartirEnCelular(
 
   const imagen = new File([blob], archivo, { type: 'image/png' })
   const admiteArchivo = puedeCompartirArchivo(imagen)
-  const url = urlWhatsApp('celular', telefono, texto)
 
   if (admiteArchivo) {
     try {
-      await navigator.share({ files: [imagen], text: texto })
+      await navigator.share({ files: [imagen] })
     } catch (error) {
       if (esCancelacion(error)) return
     }
   }
 
-  setEnlace(url)
-  const abierta = abrirChatCliente(url)
-  if (!abierta) {
-    setAviso({
-      tono: 'error',
-      texto: 'No se pudo abrir el WhatsApp de este cliente.',
-    })
-    return
-  }
-
   setAviso({
     tono: 'ok',
     texto: admiteArchivo
-      ? 'Se abrió el WhatsApp de este cliente. Si la imagen no quedó adjunta, envíala desde el menú de compartir.'
-      : 'Se abrió el WhatsApp de este cliente con el mensaje.',
+      ? 'Se abrió el chat en WhatsApp. Si la imagen no quedó adjunta, envíala desde el menú de compartir.'
+      : 'Se abrió el chat en WhatsApp.',
   })
 }
 
 async function compartirEnComputadora(
   clienteId: string,
-  telefono: string,
-  texto: string,
   archivo: string,
   venta: ItemCanasta[] | undefined,
+  imagenLista: Blob | null,
   setAviso: (aviso: AvisoEstado) => void,
-  setEnlace: (url: string | null) => void,
-) {
-  const promesaImagen = generarImagen(clienteId, venta)
-  const escritura = copiarCuandoEsteLista(promesaImagen)
-
+): Promise<{ ok: boolean; copiada: boolean }> {
   let blob: Blob
   try {
-    blob = await promesaImagen
+    blob = imagenLista ?? (await generarImagen(clienteId, venta))
   } catch (error) {
     setAviso({ tono: 'error', texto: mensajeDe(error) })
-    return
+    return { ok: false, copiada: false }
   }
 
-  const chat = urlWhatsApp('celular', telefono, texto)
-  setEnlace(chat)
-  abrirChatCliente(urlWhatsApp('app', telefono, texto))
-
-  const copiada = await escritura
+  const copiada = await copiarImagen(blob)
   if (copiada) {
     setAviso({
       tono: 'ok',
-      texto: 'Se abrió el WhatsApp de este cliente. Imagen copiada. Pégala con Ctrl+V',
+      texto: 'Imagen copiada. Se abre WhatsApp. Pégala con Ctrl+V',
     })
-    return
+    return { ok: true, copiada: true }
   }
 
   const descargo = descargarBlob(blob, archivo)
   if (!descargo) {
     setAviso({ tono: 'error', texto: 'Este navegador no puede copiar ni descargar la imagen.' })
-    return
+    return { ok: false, copiada: false }
   }
 
   setAviso({
     tono: 'ok',
     texto: `No se pudo copiar la imagen. Se descargó ${archivo} para que la adjuntes.`,
   })
+  return { ok: true, copiada: false }
 }
 
-function copiarCuandoEsteLista(promesaImagen: Promise<Blob>): Promise<boolean> {
+async function copiarImagen(blob: Blob): Promise<boolean> {
   if (typeof navigator.clipboard?.write !== 'function' || typeof ClipboardItem === 'undefined') {
-    return Promise.resolve(false)
+    return false
+  }
+
+  const png = blob.type === 'image/png' ? blob : new Blob([blob], { type: 'image/png' })
+  try {
+    window.focus()
+  } catch {
+    // Si no se puede devolver el foco, igual se intenta copiar.
   }
 
   try {
-    return navigator.clipboard
-      .write([new ClipboardItem({ 'image/png': promesaImagen })])
-      .then(() => true)
-      .catch(() => false)
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })])
+    return true
   } catch {
-    return Promise.resolve(false)
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': Promise.resolve(png) })])
+      return true
+    } catch {
+      return false
+    }
   }
 }
 
@@ -387,20 +400,6 @@ function puedeCompartirArchivo(archivo: File): boolean {
 
 function esCancelacion(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError'
-}
-
-function abrirChatCliente(url: string): boolean {
-  try {
-    const enlace = document.createElement('a')
-    enlace.href = url
-    enlace.rel = 'noopener noreferrer'
-    document.body.appendChild(enlace)
-    enlace.click()
-    enlace.remove()
-    return true
-  } catch {
-    return false
-  }
 }
 
 function descargarBlob(blob: Blob, nombre: string): boolean {

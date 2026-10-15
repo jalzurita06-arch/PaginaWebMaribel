@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { borrarMenuVenta, guardarMenuVenta, leerMenuVenta } from './ventaConfirmada.ts'
+import { borrarMenuVenta, guardarMenuVenta, leerMenuVenta, olvidarMenuVentaSiSalio } from './ventaConfirmada.ts'
 
 const memoria = new Map<string, string>()
 
@@ -30,6 +30,16 @@ describe('menu de venta confirmada', () => {
       clienteId: 'c1',
       venta: [{ precio: 5, cantidad: 2 }],
     })
+  })
+
+  it('borra el menú al salir a otra pestaña y lo deja si vuelve de Compartir', () => {
+    guardarMenuVenta('c1', [{ precio: 5, cantidad: 2 }])
+    olvidarMenuVentaSiSalio('/compartir/c1')
+    expect(leerMenuVenta()?.clienteId).toBe('c1')
+    olvidarMenuVentaSiSalio('/venta')
+    expect(leerMenuVenta()?.clienteId).toBe('c1')
+    olvidarMenuVentaSiSalio('/clientes')
+    expect(leerMenuVenta()).toBeNull()
   })
 
   it('ignora datos rotos y se puede borrar', () => {

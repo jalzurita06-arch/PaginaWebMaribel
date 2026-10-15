@@ -77,16 +77,17 @@ describe('agruparCanastasAbiertas', () => {
   it('junta las prendas de cada clienta, calcula saldo y ordena por más prendas', () => {
     expect(
       agruparCanastasAbiertas([
-        { clienteId: '2', codigo: 'Z', nombre: 'Zulema', saldoFavor: 5, precio: 9, cantidad: 1 },
-        { clienteId: '1', codigo: 'A', nombre: 'Ana', saldoFavor: 10, precio: 5, cantidad: 2 },
-        { clienteId: '1', codigo: 'A', nombre: 'Ana', saldoFavor: 10, precio: 5, cantidad: 1 },
-        { clienteId: '3', codigo: 'B', nombre: null, saldoFavor: 0, precio: 4, cantidad: 0 },
+        { clienteId: '2', codigo: 'Z', nombre: 'Zulema', telefono: '0991111111', saldoFavor: 5, precio: 9, cantidad: 1 },
+        { clienteId: '1', codigo: 'A', nombre: 'Ana', telefono: '0992222222', saldoFavor: 10, precio: 5, cantidad: 2 },
+        { clienteId: '1', codigo: 'A', nombre: 'Ana', telefono: '0992222222', saldoFavor: 10, precio: 5, cantidad: 1 },
+        { clienteId: '3', codigo: 'B', nombre: null, telefono: '0993333333', saldoFavor: 0, precio: 4, cantidad: 0 },
       ]),
     ).toEqual([
       {
         clienteId: '1',
         codigo: 'A',
         nombre: 'Ana',
+        telefono: '0992222222',
         saldoFavor: 10,
         prendas: 3,
         total: 15,
@@ -97,6 +98,7 @@ describe('agruparCanastasAbiertas', () => {
         clienteId: '2',
         codigo: 'Z',
         nombre: 'Zulema',
+        telefono: '0991111111',
         saldoFavor: 5,
         prendas: 1,
         total: 9,
@@ -108,8 +110,8 @@ describe('agruparCanastasAbiertas', () => {
 
   it('deja primero la canasta con más prendas aunque el código vaya después', () => {
     const agrupadas = agruparCanastasAbiertas([
-      { clienteId: '1', codigo: 'A', nombre: null, saldoFavor: 0, precio: 5, cantidad: 1 },
-      { clienteId: '2', codigo: 'Z', nombre: null, saldoFavor: 0, precio: 5, cantidad: 4 },
+      { clienteId: '1', codigo: 'A', nombre: null, telefono: '0991111111', saldoFavor: 0, precio: 5, cantidad: 1 },
+      { clienteId: '2', codigo: 'Z', nombre: null, telefono: '0992222222', saldoFavor: 0, precio: 5, cantidad: 4 },
     ])
     expect(agrupadas.map((canasta) => canasta.codigo)).toEqual(['Z', 'A'])
   })

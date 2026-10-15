@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  abrirChatWhatsApp,
   codificarVenta,
   datosBancariosListos,
   esCelular,
@@ -82,8 +83,73 @@ describe('enlaces y archivo', () => {
     )
   })
 
+  it('deja los emojis del mensaje en UTF-8 dentro del enlace', () => {
+    const url = urlWhatsApp('web', '59399', textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, banco))
+    expect(url).toContain(encodeURIComponent('¡Hola!'))
+    expect(url).toContain(encodeURIComponent('🌷💕'))
+    expect(url).toContain(encodeURIComponent('🥰'))
+    expect(url).toContain(encodeURIComponent('🏦'))
+    expect(url).toContain(encodeURIComponent('👩‍💼'))
+  })
+
   it('limpia el código para el nombre del archivo', () => {
     expect(nombreArchivoPedido('A 1')).toBe('pedido-A-1.png')
+  })
+})
+
+describe('abrir chat de WhatsApp en PC', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reutiliza la misma pestaña y abre otra solo si la cerraron o el navegador la bloquea', () => {
+    let href = ''
+    let cerrada = false
+    let abiertas = 0
+    const pestaña = {
+      get closed() {
+        return cerrada
+      },
+      location: {
+        get href() {
+          return href
+        },
+        set href(valor: string) {
+          href = valor
+        },
+      },
+      focus: vi.fn(),
+    }
+
+    vi.stubGlobal('window', {
+      open: (url: string, destino: string) => {
+        expect(destino).toBe('_blank')
+        expect(url).not.toContain('about:blank')
+        abiertas += 1
+        href = url
+        return pestaña
+      },
+    })
+
+    const primero = abrirChatWhatsApp('59399', 'cliente A', false)
+    expect(primero.bloqueada).toBe(false)
+    expect(abiertas).toBe(1)
+
+    const segundo = abrirChatWhatsApp('59388', 'cliente B', false)
+    expect(segundo.bloqueada).toBe(false)
+    expect(abiertas).toBe(1)
+    expect(href).toBe(urlWhatsApp('web', '59388', 'cliente B'))
+
+    cerrada = true
+    const tercero = abrirChatWhatsApp('59377', 'cliente C', false)
+    expect(tercero.bloqueada).toBe(false)
+    expect(abiertas).toBe(2)
+
+    cerrada = true
+    vi.stubGlobal('window', { open: () => null })
+    const bloqueada = abrirChatWhatsApp('59366', 'cliente D', false)
+    expect(bloqueada.bloqueada).toBe(true)
+    expect(bloqueada.url).toBe(urlWhatsApp('web', '59366', 'cliente D'))
   })
 })
 

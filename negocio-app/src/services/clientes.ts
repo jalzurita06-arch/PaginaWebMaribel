@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { DatosNuevoCliente } from '../lib/clienteFormulario.ts'
+import { capitalizarNombre, type DatosNuevoCliente } from '../lib/clienteFormulario.ts'
 import { redondear2 } from '../lib/dinero.ts'
 import {
   ordenarPorCanasta,
@@ -525,7 +525,7 @@ function leerCampos(
   const telefono = leerTelefono(datos.telefono)
   if (!telefono.ok) return telefono
 
-  const nombre = datos.nombre?.trim() || null
+  const nombre = capitalizarNombre(datos.nombre?.trim() ?? '') || null
   return { ok: true, codigo, nombre, telefono: telefono.numero }
 }
 

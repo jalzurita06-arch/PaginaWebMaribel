@@ -44,27 +44,37 @@ export function ResumenImagen({ codigo, nombre, fecha, grupos, abono, saldo, tot
         textAlign: 'left',
       }}
     >
-      <div style={{ ...caja, width: 56, height: 56 }}>
-        <LogoMarca />
-      </div>
-      <p style={{ ...caja, marginTop: 8, fontSize: 13 }}>{fecha}</p>
-      <p
+      <div
         style={{
           ...caja,
-          marginTop: 16,
-          fontSize: 26,
-          fontWeight: 600,
-          letterSpacing: '0.04em',
-          lineHeight: 1.1,
-          wordBreak: 'break-word',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
         }}
       >
-        {codigo}
-      </p>
-      {nombre ? (
-        <p style={{ ...caja, marginTop: 6, fontSize: 16, wordBreak: 'break-word' }}>{nombre}</p>
-      ) : null}
-      {concepto ? <p style={{ ...caja, marginTop: 8, fontSize: 14 }}>{concepto}</p> : null}
+        <div style={{ ...caja, minWidth: 0, flex: '1 1 auto' }}>
+          <p style={{ ...caja, fontSize: 13 }}>{fecha}</p>
+          <p
+            style={{
+              ...caja,
+              marginTop: 16,
+              fontSize: 26,
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+              lineHeight: 1.1,
+              wordBreak: 'break-word',
+            }}
+          >
+            {codigo}
+          </p>
+          {nombre ? (
+            <p style={{ ...caja, marginTop: 6, fontSize: 16, wordBreak: 'break-word' }}>{nombre}</p>
+          ) : null}
+          {concepto ? <p style={{ ...caja, marginTop: 8, fontSize: 14 }}>{concepto}</p> : null}
+        </div>
+        <LogoMarca estilo={{ display: 'block', width: 56, height: 56, flexShrink: 0 }} />
+      </div>
 
       <Regla />
 
@@ -86,7 +96,7 @@ export function ResumenImagen({ codigo, nombre, fecha, grupos, abono, saldo, tot
 
       <Regla />
 
-      <Linea etiqueta="Abono" valor={formatearDolares(abono)} />
+      <Linea etiqueta="Abonado" valor={formatearDolares(abono)} />
       <Linea etiqueta="Saldo" valor={formatearDolares(saldo)} />
       <Linea etiqueta="Total" valor={formatearDolares(total)} fuerte />
     </article>

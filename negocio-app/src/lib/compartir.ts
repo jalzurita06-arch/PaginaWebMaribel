@@ -22,7 +22,13 @@ const MESES = [
   'diciembre',
 ] as const
 
-const SEPARADOR = '━'.repeat(12)
+const SEPARADOR = '\u2501'.repeat(12)
+const FLORES = '\u{1F337}\u{1F495}'
+const CARINO = '\u{1F970}'
+const ICONO_BANCO = '\u{1F3E6}'
+const ICONO_TITULAR = '\u{1F469}\u{200D}\u{1F4BC}'
+const ICONO_CUENTA = '\u{1F4B3}'
+const ICONO_NUMERO = '\u{1F522}'
 
 export type DatosBancarios = {
   banco: string
@@ -66,17 +72,19 @@ export function textoWhatsApp(
 ): string {
   const codigo = cliente.codigo.trim()
   const nombre = cliente.nombre?.trim() ?? ''
-  const saludo = nombre ? `¡Hola! ${nombre}-${codigo} 🌷💕` : `¡Hola! ${codigo} 🌷💕`
+  const saludo = nombre
+    ? `\u00A1Hola! ${nombre}-${codigo} ${FLORES}`
+    : `\u00A1Hola! ${codigo} ${FLORES}`
 
   return [
     saludo,
-    'Le hago llegar el detalle de su pedido y el valor pendiente por cancelar. Muchas gracias por su confianza. 🥰',
+    `Le hago llegar el detalle de su pedido y el valor pendiente por cancelar. Muchas gracias por su confianza. ${CARINO}`,
     SEPARADOR,
-    `🏦 *${datos.banco.trim()}*`,
-    `👩‍💼 ${datos.nombreTitular.trim()}`,
-    `💳 ${datos.tipoCuenta.trim()}`,
-    `🔢 ${datos.numeroCuenta.trim()}`,
-    `Cédula : ${datos.cedula.trim()}`,
+    `${ICONO_BANCO} *${datos.banco.trim()}*`,
+    `${ICONO_TITULAR} ${datos.nombreTitular.trim()}`,
+    `${ICONO_CUENTA} ${datos.tipoCuenta.trim()}`,
+    `${ICONO_NUMERO} ${datos.numeroCuenta.trim()}`,
+    `C\u00E9dula : ${datos.cedula.trim()}`,
   ].join('\n')
 }
 
@@ -85,6 +93,61 @@ export function urlWhatsApp(via: 'celular' | 'web' | 'app', telefono: string, te
   if (via === 'app') return `whatsapp://send?phone=${telefono}&text=${mensaje}`
   if (via === 'celular') return `https://wa.me/${telefono}?text=${mensaje}`
   return `https://web.whatsapp.com/send?phone=${telefono}&text=${mensaje}`
+}
+
+let ventanaWhatsapp: Window | null = null
+
+export const MENSAJE_VENTANA_BLOQUEADA =
+  'Permite ventanas emergentes para este sitio en tu navegador'
+
+/** Abre o reutiliza el chat. En PC no hay await: debe llamarse en el mismo clic. */
+export function abrirChatWhatsApp(
+  telefono: string,
+  texto: string,
+  celular: boolean,
+): { url: string; bloqueada: boolean } {
+  if (celular) {
+    const app = urlWhatsApp('app', telefono, texto)
+    const enlace = document.createElement('a')
+    enlace.href = app
+    document.body.appendChild(enlace)
+    enlace.click()
+    enlace.remove()
+    return { url: urlWhatsApp('celular', telefono, texto), bloqueada: false }
+  }
+
+  const url = urlWhatsApp('web', telefono, texto)
+  if (ventanaWhatsapp && !ventanaWhatsapp.closed) {
+    try {
+      ventanaWhatsapp.location.href = url
+      ventanaWhatsapp.focus()
+      return { url, bloqueada: false }
+    } catch {
+      try {
+        ventanaWhatsapp.location.assign(url)
+        ventanaWhatsapp.focus()
+        return { url, bloqueada: false }
+      } catch {
+        // Si el navegador no deja navegar esa pestaña, se abre otra.
+      }
+    }
+  }
+
+  ventanaWhatsapp = window.open(url, '_blank')
+  if (ventanaWhatsapp == null) return { url, bloqueada: true }
+  ventanaWhatsapp.focus()
+  return { url, bloqueada: false }
+}
+
+/** Mismo clic en Venta, Canasta o Compartir: abre o reutiliza el chat. */
+export function abrirWhatsAppDeCliente(
+  cliente: { nombre: string | null; codigo: string; telefono: string },
+  datos: DatosBancarios,
+  prefijo: string,
+): { url: string; bloqueada: boolean } {
+  const telefono = telefonoConPrefijo(cliente.telefono, prefijo)
+  if (!telefono || !datosBancariosListos(datos)) return { url: '', bloqueada: false }
+  return abrirChatWhatsApp(telefono, textoWhatsApp(cliente, datos), detectarCelular())
 }
 
 export function nombreArchivoPedido(codigo: string): string {
@@ -136,4 +199,14 @@ export function esCelular(
 ): boolean {
   if (/Android|iPhone|iPad|iPod/i.test(agente)) return true
   return opciones?.plataforma === 'MacIntel' && (opciones.puntosTactiles ?? 0) > 1
+}
+
+export function detectarCelular(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const nav = navigator as Navigator & { userAgentData?: { mobile?: boolean } }
+  if (typeof nav.userAgentData?.mobile === 'boolean') return nav.userAgentData.mobile
+  return esCelular(nav.userAgent, {
+    plataforma: nav.platform,
+    puntosTactiles: nav.maxTouchPoints,
+  })
 }

@@ -1,14 +1,18 @@
+import type { CSSProperties } from 'react'
+
 type Props = {
   className?: string
   acento?: string
+  estilo?: CSSProperties
 }
 
 /** Marca temporal: percha y vestido, hasta que se ponga el logo definitivo. */
-export function LogoMarca({ className = '', acento = '#E7C8A0' }: Props) {
+export function LogoMarca({ className = '', acento = '#E7C8A0', estilo }: Props) {
   return (
     <svg
       viewBox="0 0 80 80"
       className={className}
+      style={estilo}
       role="img"
       aria-label="Fashion House"
     >

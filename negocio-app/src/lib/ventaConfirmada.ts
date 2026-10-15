@@ -18,6 +18,12 @@ export function borrarMenuVenta(): void {
   sessionStorage.removeItem(CLAVE)
 }
 
+/** El menú confirmado solo se conserva al ir a Compartir y al volver a Venta. */
+export function olvidarMenuVentaSiSalio(pathname: string): void {
+  if (pathname.startsWith('/venta') || pathname.startsWith('/compartir')) return
+  borrarMenuVenta()
+}
+
 export function leerMenuVenta(): MenuVentaConfirmada | null {
   if (typeof sessionStorage === 'undefined') return null
   try {

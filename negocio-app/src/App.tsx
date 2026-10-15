@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { CargandoSesion } from './components/CargandoSesion.tsx'
@@ -6,6 +7,7 @@ import { RutaProtegida } from './components/RutaProtegida.tsx'
 import { ProveedorConexion } from './context/ProveedorConexion.tsx'
 import { ProveedorSesion } from './context/ProveedorSesion.tsx'
 import { useSesion } from './context/useSesion.ts'
+import { olvidarMenuVentaSiSalio } from './lib/ventaConfirmada.ts'
 import { Abonos } from './pages/Abonos.tsx'
 import { Canasta } from './pages/Canasta.tsx'
 import { Catalogo } from './pages/Catalogo.tsx'
@@ -21,6 +23,10 @@ function Rutas() {
   const ubicacion = useLocation()
   const reducirMovimiento = useReducedMotion()
   const { cargando } = useSesion()
+
+  useEffect(() => {
+    olvidarMenuVentaSiSalio(ubicacion.pathname)
+  }, [ubicacion.pathname])
 
   if (cargando) return <CargandoSesion />
 

@@ -32,6 +32,7 @@ export type CanastaAbierta = {
   clienteId: string
   codigo: string
   nombre: string | null
+  telefono: string
   saldoFavor: number
   prendas: number
   total: number
@@ -61,6 +62,7 @@ type FilaAgrupable = {
   clienteId: string
   codigo: string
   nombre: string | null
+  telefono: string
   saldoFavor: number
   precio: number
   cantidad: number
@@ -161,7 +163,7 @@ export function armarRegistroEnvio(
 export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[] {
   const porCliente = new Map<
     string,
-    { codigo: string; nombre: string | null; saldoFavor: number; items: ItemCanasta[] }
+    { codigo: string; nombre: string | null; telefono: string; saldoFavor: number; items: ItemCanasta[] }
   >()
 
   for (const fila of filas) {
@@ -169,6 +171,7 @@ export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[
     const actual = porCliente.get(fila.clienteId) ?? {
       codigo: fila.codigo,
       nombre: fila.nombre,
+      telefono: fila.telefono,
       saldoFavor: fila.saldoFavor,
       items: [],
     }
@@ -185,6 +188,7 @@ export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[
           clienteId,
           codigo: datos.codigo,
           nombre: datos.nombre,
+          telefono: datos.telefono,
           saldoFavor: redondear2(Math.max(0, datos.saldoFavor)),
           prendas: totalPrendas(grupos),
           total,
@@ -203,7 +207,7 @@ export async function listarCanastasAbiertas(): Promise<Resultado<CanastaAbierta
   try {
     const { data, error } = await db
       .from('canasta_items')
-      .select('precio, cantidad, clientes(id, codigo, nombre, saldo_favor)')
+      .select('precio, cantidad, clientes(id, codigo, nombre, telefono, saldo_favor)')
 
     if (error) return { ok: false, mensaje: mensajeErrorEnvio(error, 'cargar las canastas') }
     const filas = leerFilasCanasta(data)
@@ -459,6 +463,7 @@ function leerFilasCanasta(data: unknown): FilaAgrupable[] | null {
       clienteId: cliente.id,
       codigo: cliente.codigo,
       nombre: cliente.nombre,
+      telefono: cliente.telefono,
       saldoFavor: cliente.saldoFavor,
       precio: redondear2(precio),
       cantidad,
@@ -470,7 +475,7 @@ function leerFilasCanasta(data: unknown): FilaAgrupable[] | null {
 
 function clienteEmbebido(
   valor: unknown,
-): { id: string; codigo: string; nombre: string | null; saldoFavor: number } | null | 'invalido' {
+): { id: string; codigo: string; nombre: string | null; telefono: string; saldoFavor: number } | null | 'invalido' {
   const fila = Array.isArray(valor) ? valor[0] : valor
   if (fila == null) return null
   if (typeof fila !== 'object') return 'invalido'
@@ -479,10 +484,17 @@ function clienteEmbebido(
   if (!(datos.nombre === null || datos.nombre === undefined || typeof datos.nombre === 'string')) {
     return 'invalido'
   }
+  if (typeof datos.telefono !== 'string') return 'invalido'
   const saldo = Number(datos.saldo_favor)
   if (!Number.isFinite(saldo)) return 'invalido'
   const nombre = typeof datos.nombre === 'string' && datos.nombre.trim() ? datos.nombre.trim() : null
-  return { id: datos.id, codigo: datos.codigo, nombre, saldoFavor: redondear2(Math.max(0, saldo)) }
+  return {
+    id: datos.id,
+    codigo: datos.codigo,
+    nombre,
+    telefono: datos.telefono,
+    saldoFavor: redondear2(Math.max(0, saldo)),
+  }
 }
 
 function leerClienteEnvio(valor: unknown): ClienteEnvio | null {
