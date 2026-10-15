@@ -1192,17 +1192,27 @@ function SelectorEnvio({
   onCancelar: () => void
 }) {
   const { enLinea } = useConexion()
+  const esPc = usePantallaPc()
   const reducirMovimiento = useReducedMotion()
   const panelId = useId()
+  const tituloId = useId()
   const refBoton = useRef<HTMLButtonElement>(null)
   const refPanel = useRef<HTMLDivElement>(null)
-  const [caja, setCaja] = useState<{ top: number; right: number; width: number } | null>(null)
+  const [caja, setCaja] = useState<{
+    top?: number
+    bottom?: number
+    right: number
+    width: number
+    maxHeight: number
+  } | null>(null)
   const etiqueta = abierto && paso === 'tipo' ? 'Enviado' : 'Bodega'
   const colorEstado = etiqueta === 'Enviado' ? 'bg-afirmar' : 'bg-fondo'
   const salto = reducirMovimiento === true
+  const transicion = salto ? { duration: 0 } : transicionDesplegar
+  const etiquetaPanel = paso === 'tipo' ? `Tipo de envío de ${codigo}` : `Estado de ${codigo}`
 
   useEffect(() => {
-    if (!abierto) {
+    if (!abierto || !esPc) {
       setCaja(null)
       return
     }
@@ -1210,11 +1220,29 @@ function SelectorEnvio({
     function ubicar() {
       const boton = refBoton.current?.getBoundingClientRect()
       if (!boton) return
-      setCaja({
-        top: boton.bottom + 8,
-        right: window.innerWidth - boton.right,
-        width: Math.max(boton.width, 176),
-      })
+      const margen = 8
+      const ancho = Math.max(boton.width, 176)
+      const altoEstimado = paso === 'tipo' ? 360 : 160
+      const espacioAbajo = window.innerHeight - boton.bottom - margen
+      const espacioArriba = boton.top - margen
+      const abrirArriba = espacioAbajo < Math.min(altoEstimado, 280) && espacioArriba > espacioAbajo
+      const maxHeight = Math.max(120, (abrirArriba ? espacioArriba : espacioAbajo) - 8)
+
+      setCaja(
+        abrirArriba
+          ? {
+              bottom: window.innerHeight - boton.top + margen,
+              right: window.innerWidth - boton.right,
+              width: ancho,
+              maxHeight,
+            }
+          : {
+              top: boton.bottom + margen,
+              right: window.innerWidth - boton.right,
+              width: ancho,
+              maxHeight,
+            },
+      )
     }
 
     ubicar()
@@ -1224,89 +1252,150 @@ function SelectorEnvio({
       window.removeEventListener('resize', ubicar)
       window.removeEventListener('scroll', ubicar, true)
     }
-  }, [abierto, paso])
+  }, [abierto, paso, esPc])
 
   useEffect(() => {
-    if (!abierto || !caja) return
+    if (!abierto) return
+    if (esPc && !caja) return
     refPanel.current?.querySelector('button')?.focus()
-  }, [abierto, paso, caja])
+  }, [abierto, paso, caja, esPc])
 
   useEffect(() => {
     if (!abierto) return
     function cerrarTecla(evento: KeyboardEvent) {
       if (evento.key === 'Escape' && !enviando) onCancelar()
     }
+    window.addEventListener('keydown', cerrarTecla)
+    return () => window.removeEventListener('keydown', cerrarTecla)
+  }, [abierto, enviando, onCancelar])
+
+  useEffect(() => {
+    if (!abierto || !esPc) return
     function cerrarClic(evento: Event) {
       const destino = evento.target
       if (!(destino instanceof Node)) return
       if (refBoton.current?.contains(destino) || refPanel.current?.contains(destino)) return
       if (!enviando) onCancelar()
     }
-    window.addEventListener('keydown', cerrarTecla)
     document.addEventListener('mousedown', cerrarClic)
-    return () => {
-      window.removeEventListener('keydown', cerrarTecla)
-      document.removeEventListener('mousedown', cerrarClic)
-    }
-  }, [abierto, enviando, onCancelar])
+    return () => document.removeEventListener('mousedown', cerrarClic)
+  }, [abierto, esPc, enviando, onCancelar])
 
-  const panel =
-    abierto && caja
-      ? createPortal(
+  useEffect(() => {
+    if (!abierto) return
+    const boton = refBoton.current
+    return () => boton?.focus()
+  }, [abierto])
+
+  const opciones =
+    paso === 'menu' ? (
+      <>
+        <button type="button" aria-pressed onClick={onBodega} className={`${boton} bg-fondo`}>
+          Bodega
+        </button>
+        <button type="button" onClick={onEnviado} className={`${boton} bg-afirmar`}>
+          Enviado
+        </button>
+      </>
+    ) : (
+      <>
+        {TIPOS_ENVIO.map((opcion) => (
+          <button
+            key={opcion}
+            type="button"
+            aria-pressed={tipo === opcion}
+            disabled={enviando}
+            onClick={() => onElegirTipo(opcion)}
+            className={boton}
+            style={{ backgroundColor: tipo === opcion ? acento : '#F5F0E8', color: '#000' }}
+          >
+            {etiquetasTipo[opcion]}
+          </button>
+        ))}
+        <button
+          type="button"
+          disabled={enviando || tipo == null || !enLinea}
+          onClick={() => {
+            if (tipo) onConfirmar(tipo)
+          }}
+          className={`inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full bg-black px-4 py-3 text-center text-base text-white [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 ${enviando ? 'opacity-50' : ''}`}
+        >
+          {enviando ? 'Enviando…' : 'Confirmar'}
+        </button>
+        <button type="button" disabled={enviando} onClick={onCancelar} className={`${boton} bg-fondo`}>
+          Cancelar
+        </button>
+      </>
+    )
+
+  const panel = createPortal(
+    <AnimatePresence>
+      {abierto && (!esPc || caja) ? (
+        esPc && caja ? (
           <motion.div
+            key="envio-pc"
             ref={refPanel}
             id={panelId}
             role="group"
-            aria-label={paso === 'tipo' ? `Tipo de envío de ${codigo}` : `Estado de ${codigo}`}
-            initial={salto ? false : { opacity: 0, y: -8 }}
+            aria-label={etiquetaPanel}
+            initial={salto ? false : { opacity: 0, y: caja.bottom != null ? 8 : -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={salto ? { duration: 0 } : transicionDesplegar}
-            className="fixed z-50 flex flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
-            style={{ top: caja.top, right: caja.right, width: caja.width }}
+            exit={salto ? undefined : { opacity: 0, y: caja.bottom != null ? 8 : -8 }}
+            transition={transicion}
+            className="fixed z-50 flex max-h-[min(70dvh,24rem)] flex-col gap-2 overflow-y-auto rounded-3xl bg-white p-3 shadow-md"
+            style={{
+              top: caja.top,
+              bottom: caja.bottom,
+              right: caja.right,
+              width: caja.width,
+              maxHeight: caja.maxHeight,
+            }}
           >
-            {paso === 'menu' ? (
-              <>
-                <button type="button" aria-pressed onClick={onBodega} className={`${boton} bg-fondo`}>
-                  Bodega
-                </button>
-                <button type="button" onClick={onEnviado} className={`${boton} bg-afirmar`}>
-                  Enviado
-                </button>
-              </>
-            ) : (
-              <>
-                {TIPOS_ENVIO.map((opcion) => (
-                  <button
-                    key={opcion}
-                    type="button"
-                    aria-pressed={tipo === opcion}
-                    disabled={enviando}
-                    onClick={() => onElegirTipo(opcion)}
-                    className={boton}
-                    style={{ backgroundColor: tipo === opcion ? acento : '#F5F0E8', color: '#000' }}
-                  >
-                    {etiquetasTipo[opcion]}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={enviando || tipo == null || !enLinea}
-                  onClick={() => {
-                    if (tipo) onConfirmar(tipo)
-                  }}
-                  className={`inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full bg-black px-4 py-3 text-center text-base text-white [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 ${enviando ? 'opacity-50' : ''}`}
-                >
-                  {enviando ? 'Enviando…' : 'Confirmar'}
-                </button>
-                <button type="button" disabled={enviando} onClick={onCancelar} className={`${boton} bg-fondo`}>
-                  Cancelar
-                </button>
-              </>
-            )}
-          </motion.div>,
-          document.body,
+            {opciones}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="envio-movil"
+            className="fixed inset-0 z-50"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloId}
+            initial={salto ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={salto ? undefined : { opacity: 0 }}
+            transition={transicion}
+          >
+            <button
+              type="button"
+              aria-label="Cerrar envío"
+              disabled={enviando}
+              onClick={() => {
+                if (!enviando) onCancelar()
+              }}
+              className="absolute inset-0 bg-black/25"
+            />
+            <motion.div
+              ref={refPanel}
+              id={panelId}
+              role="group"
+              aria-label={etiquetaPanel}
+              initial={salto ? false : { opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={salto ? undefined : { opacity: 0, y: 28 }}
+              transition={transicion}
+              className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[min(88dvh,40rem)] w-full max-w-md flex-col gap-2 overflow-y-auto rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md"
+            >
+              <p id={tituloId} className="px-2 pb-1 text-sm text-black/60">
+                {paso === 'tipo' ? 'Tipo de envío' : 'Estado'}
+              </p>
+              {opciones}
+            </motion.div>
+          </motion.div>
         )
-      : null
+      ) : null}
+    </AnimatePresence>,
+    document.body,
+  )
 
   return (
     <div className="relative">
@@ -1315,7 +1404,7 @@ function SelectorEnvio({
         type="button"
         aria-expanded={abierto}
         aria-controls={panelId}
-        aria-haspopup="true"
+        aria-haspopup={esPc ? 'true' : 'dialog'}
         aria-label={`Estado de ${codigo}`}
         disabled={ocupado || enviando}
         onClick={() => (abierto ? onCancelar() : onAbrir())}

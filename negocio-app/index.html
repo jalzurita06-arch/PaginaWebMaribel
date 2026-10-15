@@ -9,22 +9,21 @@
     <script>
       // En el celular, «sitio de escritorio» a veces no ensancha la página.
       // Si sigue con el ancho del teléfono, se usa el de una computadora.
+      // En pantallas grandes (p. ej. S25 Ultra) el modo escritorio puede inflar
+      // screen.* y ya no parecer «teléfono»; igual hay que forzar el viewport.
       ;(function () {
         var agente = navigator.userAgent || ''
         var datos = navigator.userAgentData
         var tactil = navigator.maxTouchPoints > 0
-        var densidad = window.devicePixelRatio || 1
-        var ladoCorto = Math.min(screen.width, screen.height)
-        if (ladoCorto > 800 && densidad > 1) ladoCorto = ladoCorto / densidad
-        var esTelefono = ladoCorto > 0 && ladoCorto <= 520
-        if (!esTelefono) return
+        if (!tactil) return
+        if ((window.innerWidth || 0) >= 980) return
         var androidEscritorio =
           (/Android/i.test(agente) && !/Mobile/i.test(agente)) ||
           (!!datos && datos.mobile === false && /android/i.test(datos.platform || ''))
-        var iphoneEscritorio = /Macintosh/i.test(agente) && tactil
-        var otroEscritorio = tactil && !/Mobile|iPhone|iPad|Android/i.test(agente)
-        if (!androidEscritorio && !iphoneEscritorio && !otroEscritorio) return
-        if ((window.innerWidth || 0) >= 980) return
+        var iphoneEscritorio = /Macintosh/i.test(agente)
+        var otroEscritorio = !/Mobile|iPhone|iPad|Android/i.test(agente)
+        var datosEscritorio = !!datos && datos.mobile === false
+        if (!androidEscritorio && !iphoneEscritorio && !otroEscritorio && !datosEscritorio) return
         var meta = document.querySelector('meta[name="viewport"]')
         if (meta) meta.setAttribute('content', 'width=1280')
       })()
