@@ -1,0 +1,161 @@
+import { describe, expect, it } from 'vitest'
+import {
+  codificarVenta,
+  datosBancariosListos,
+  esCelular,
+  formatearFechaRecibo,
+  leerVenta,
+  nombreArchivoPedido,
+  resumenPedido,
+  telefonoConPrefijo,
+  textoWhatsApp,
+  urlWhatsApp,
+  type DatosBancarios,
+} from './compartir.ts'
+
+const banco: DatosBancarios = {
+  banco: 'Banco Pichincha',
+  nombreTitular: 'Maribel Lozada Reyes',
+  tipoCuenta: 'Cuenta de Ahorro',
+  numeroCuenta: '2201156975',
+  cedula: '1721965281',
+}
+
+const mensajeConNombre = `¡Hola! Ana-A1 🌷💕
+Le hago llegar el detalle de su pedido y el valor pendiente por cancelar. Muchas gracias por su confianza. 🥰
+━━━━━━━━━━━━
+🏦 *Banco Pichincha*
+👩‍💼 Maribel Lozada Reyes
+💳 Cuenta de Ahorro
+🔢 2201156975
+Cédula : 1721965281`
+
+describe('teléfono para WhatsApp', () => {
+  it('quita el 0 inicial y antepone 593', () => {
+    expect(telefonoConPrefijo('0998765432', '593')).toBe('593998765432')
+  })
+
+  it('no repite el prefijo si el número ya lo trae', () => {
+    expect(telefonoConPrefijo('593998765432', '593')).toBe('593998765432')
+    expect(telefonoConPrefijo('+593 99 876 5432', '593')).toBe('593998765432')
+  })
+
+  it('antepone el prefijo cuando no hay 0 ni prefijo', () => {
+    expect(telefonoConPrefijo('998765432', '593')).toBe('593998765432')
+  })
+
+  it('deja vacío un teléfono sin dígitos útiles', () => {
+    expect(telefonoConPrefijo('0', '593')).toBe('')
+    expect(telefonoConPrefijo('abc', '593')).toBe('')
+  })
+})
+
+describe('texto de WhatsApp', () => {
+  it('arma el mensaje con nombre, código y datos del negocio', () => {
+    expect(textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, banco)).toBe(mensajeConNombre)
+  })
+
+  it('usa solo el código cuando no hay nombre', () => {
+    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, banco)).toContain('¡Hola! B2 🌷💕')
+    expect(textoWhatsApp({ nombre: '   ', codigo: 'B2' }, banco)).toContain('¡Hola! B2 🌷💕')
+    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, banco)).not.toContain('¡Hola! -')
+  })
+
+  it('toma el banco desde los datos, no un texto fijo', () => {
+    expect(textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, { ...banco, banco: 'Otro banco' })).toContain(
+      '🏦 *Otro banco*',
+    )
+  })
+
+  it('exige los cinco datos bancarios', () => {
+    expect(datosBancariosListos(banco)).toBe(true)
+    expect(datosBancariosListos({ ...banco, cedula: '  ' })).toBe(false)
+  })
+})
+
+describe('enlaces y archivo', () => {
+  it('arma el chat del cliente en el celular, en la app y en WhatsApp Web', () => {
+    expect(urlWhatsApp('celular', '59399', 'hola\nmundo')).toBe('https://wa.me/59399?text=hola%0Amundo')
+    expect(urlWhatsApp('app', '59399', 'hola')).toBe('whatsapp://send?phone=59399&text=hola')
+    expect(urlWhatsApp('web', '59399', 'a b')).toBe(
+      'https://web.whatsapp.com/send?phone=59399&text=a%20b',
+    )
+  })
+
+  it('limpia el código para el nombre del archivo', () => {
+    expect(nombreArchivoPedido('A 1')).toBe('pedido-A-1.png')
+  })
+})
+
+describe('resumen del pedido', () => {
+  it('agrupa por precio, ordena y calcula abono, saldo y total sin tocar los ítems', () => {
+    const items = [
+      { precio: 9, cantidad: 2 },
+      { precio: 5, cantidad: 1 },
+      { precio: 5, cantidad: 2 },
+    ]
+
+    expect(resumenPedido(items, 5)).toEqual({
+      grupos: [
+        { precio: 5, cantidad: 3, subtotal: 15 },
+        { precio: 9, cantidad: 2, subtotal: 18 },
+      ],
+      total: 33,
+      abono: 5,
+      saldo: 28,
+    })
+    expect(items).toEqual([
+      { precio: 9, cantidad: 2 },
+      { precio: 5, cantidad: 1 },
+      { precio: 5, cantidad: 2 },
+    ])
+  })
+
+  it('escribe la fecha del día en español', () => {
+    expect(formatearFechaRecibo(new Date(2026, 9, 14))).toBe('14 de octubre de 2026')
+  })
+})
+
+describe('venta para compartir', () => {
+  it('guarda y lee solo las prendas de esa venta', () => {
+    const items = [
+      { precio: 5, cantidad: 2 },
+      { precio: 3.5, cantidad: 1 },
+    ]
+    expect(leerVenta(codificarVenta(items))).toEqual([
+      { precio: 5, cantidad: 2 },
+      { precio: 3.5, cantidad: 1 },
+    ])
+  })
+
+  it('rechaza un texto que no es una venta', () => {
+    expect(leerVenta('')).toBeNull()
+    expect(leerVenta('5')).toBeNull()
+    expect(leerVenta('0x2')).toBeNull()
+    expect(leerVenta('5x0')).toBeNull()
+  })
+})
+
+describe('dispositivo', () => {
+  it('trata Android, iPhone y iPad como celular', () => {
+    expect(
+      esCelular('Mozilla/5.0 (Linux; Android 13; 2201117TG) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'),
+    ).toBe(true)
+    expect(esCelular('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')).toBe(true)
+    expect(
+      esCelular('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', {
+        plataforma: 'MacIntel',
+        puntosTactiles: 5,
+      }),
+    ).toBe(true)
+  })
+
+  it('trata Windows como computadora', () => {
+    expect(
+      esCelular('Mozilla/5.0 (Windows NT 10.0; Win64; x64)', {
+        plataforma: 'Win32',
+        puntosTactiles: 0,
+      }),
+    ).toBe(false)
+  })
+})
