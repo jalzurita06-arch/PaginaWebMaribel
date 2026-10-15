@@ -4,7 +4,7 @@ import {
   calcularEnvio,
   excedenteAbono,
   mensajeAbonoRegistrado,
-  ordenarClientesVenta,
+  ordenarPorCanasta,
   saldoPendiente,
   saldoTrasEditarAbono,
   sumarAbono,
@@ -146,16 +146,16 @@ describe('mensajeAbonoRegistrado', () => {
   })
 })
 
-describe('ordenarClientesVenta', () => {
-  it('deja activas primero y ordena por más prendas pedidas', () => {
+describe('ordenarPorCanasta', () => {
+  it('deja primero a quien más prendas tiene en la canasta', () => {
     expect(
-      ordenarClientesVenta([
-        { codigo: 'B', estado: 'activo', prendas: 1 },
-        { codigo: 'A', estado: 'inactivo', prendas: 8 },
-        { codigo: 'C', estado: 'activo', prendas: 5 },
-        { codigo: 'D', estado: 'activo', prendas: 5 },
+      ordenarPorCanasta([
+        { codigo: 'B', prendas: 1 },
+        { codigo: 'A', prendas: 8 },
+        { codigo: 'C', prendas: 5 },
+        { codigo: 'D', prendas: 5 },
       ]).map((cliente) => cliente.codigo),
-    ).toEqual(['C', 'D', 'B', 'A'])
+    ).toEqual(['A', 'C', 'D', 'B'])
   })
 })
 

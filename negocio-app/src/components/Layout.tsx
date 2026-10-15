@@ -4,6 +4,8 @@ import { ArrowLeft } from 'lucide-react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { cerrarSesion } from '../services/sesion.ts'
 import { Aviso } from './Aviso.tsx'
+import { LogoMarca } from './LogoMarca.tsx'
+import { MenuNavegacion } from './MenuNavegacion.tsx'
 
 const Enlace = motion.create(Link)
 
@@ -37,9 +39,15 @@ export function Layout({ titulo, subtitulo, acento, children }: LayoutProps) {
   return (
     <main className="min-h-dvh bg-fondo px-5 py-6 text-black lg:px-10 lg:py-10">
       <div className="mx-auto flex w-full max-w-lg flex-col gap-6 lg:max-w-6xl lg:gap-8">
-        <header className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-5 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-x-8">
-          <div className="lg:col-start-1 lg:row-start-1">
-            {mostrarVolver ? <BotonVolver reducirMovimiento={reducirMovimiento} /> : <EspacioLogo acento={acento} />}
+        <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-4 lg:gap-x-8">
+          <div className="col-start-1 row-start-1">
+            {pathname === '/login' ? (
+              <LogoMarca acento={acento} className="size-16 shrink-0 drop-shadow-sm lg:size-20" />
+            ) : mostrarVolver ? (
+              <BotonVolver reducirMovimiento={reducirMovimiento} />
+            ) : (
+              <MenuNavegacion acento={acento} />
+            )}
           </div>
           {esInicio ? (
             <motion.button
@@ -48,20 +56,32 @@ export function Layout({ titulo, subtitulo, acento, children }: LayoutProps) {
               disabled={saliendo}
               whileTap={reducirMovimiento || saliendo ? undefined : toque}
               transition={{ duration: 0.15 }}
-              className="col-start-2 row-start-1 inline-flex min-h-11 shrink-0 justify-self-end touch-manipulation items-center rounded-full bg-black/5 px-4 text-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 lg:col-start-3 lg:px-5"
+              className="col-start-3 row-start-1 inline-flex min-h-11 shrink-0 justify-self-end touch-manipulation items-center rounded-full bg-black/5 px-3 text-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 lg:px-5"
             >
               {saliendo ? 'Cerrando sesión…' : 'Cerrar sesión'}
             </motion.button>
           ) : mostrarVolver ? (
-            <div className="col-start-2 row-start-1 justify-self-end lg:col-start-3">
-              <EspacioLogo acento={acento} />
+            <div className="col-start-3 row-start-1 justify-self-end">
+              <MenuNavegacion acento={acento} />
             </div>
           ) : null}
-          <div className="col-span-2 lg:col-span-1 lg:col-start-2 lg:row-start-1">
-            <h1 className="font-display text-6xl uppercase leading-none tracking-wide lg:text-7xl">
+          <div
+            className={
+              mostrarVolver
+                ? 'col-span-3 min-w-0 lg:col-span-1 lg:col-start-2 lg:row-start-1'
+                : 'col-start-2 row-start-1 min-w-0'
+            }
+          >
+            <h1
+              className={
+                mostrarVolver
+                  ? 'font-display text-6xl uppercase leading-none tracking-wide lg:text-7xl'
+                  : 'font-display text-5xl uppercase leading-none tracking-wide lg:text-7xl'
+              }
+            >
               {titulo}
             </h1>
-            <p className="mt-2 font-sans text-xs font-medium uppercase tracking-[0.28em] text-black/60 lg:text-sm">
+            <p className="mt-1 font-sans text-xs font-medium uppercase tracking-[0.28em] text-black/60 lg:mt-2 lg:text-sm">
               {subtitulo}
             </p>
           </div>
@@ -70,16 +90,6 @@ export function Layout({ titulo, subtitulo, acento, children }: LayoutProps) {
         {children}
       </div>
     </main>
-  )
-}
-
-function EspacioLogo({ acento }: { acento: string }) {
-  return (
-    <div
-      className="size-16 shrink-0 rounded-3xl shadow-sm lg:size-20"
-      style={{ backgroundColor: acento }}
-      aria-hidden="true"
-    />
   )
 }
 

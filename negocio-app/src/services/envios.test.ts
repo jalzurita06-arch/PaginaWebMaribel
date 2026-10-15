@@ -74,7 +74,7 @@ describe('armarRegistroEnvio', () => {
 })
 
 describe('agruparCanastasAbiertas', () => {
-  it('junta las prendas de cada clienta, calcula saldo y ordena por código', () => {
+  it('junta las prendas de cada clienta, calcula saldo y ordena por más prendas', () => {
     expect(
       agruparCanastasAbiertas([
         { clienteId: '2', codigo: 'Z', nombre: 'Zulema', saldoFavor: 5, precio: 9, cantidad: 1 },
@@ -104,6 +104,14 @@ describe('agruparCanastasAbiertas', () => {
         grupos: [{ precio: 9, cantidad: 1, subtotal: 9 }],
       },
     ])
+  })
+
+  it('deja primero la canasta con más prendas aunque el código vaya después', () => {
+    const agrupadas = agruparCanastasAbiertas([
+      { clienteId: '1', codigo: 'A', nombre: null, saldoFavor: 0, precio: 5, cantidad: 1 },
+      { clienteId: '2', codigo: 'Z', nombre: null, saldoFavor: 0, precio: 5, cantidad: 4 },
+    ])
+    expect(agrupadas.map((canasta) => canasta.codigo)).toEqual(['Z', 'A'])
   })
 })
 

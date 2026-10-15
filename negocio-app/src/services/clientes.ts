@@ -2,11 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DatosNuevoCliente } from '../lib/clienteFormulario.ts'
 import { redondear2 } from '../lib/dinero.ts'
 import {
-  ordenarClientesVenta,
+  ordenarPorCanasta,
   saldoPendiente,
   saldoTrasEditarAbono,
   sumarAbono,
   totalCanasta,
+  totalPrendas,
 } from '../lib/reglas.ts'
 import { supabase } from '../lib/supabase.ts'
 
@@ -58,29 +59,7 @@ export function mensajeErrorCliente(error: unknown, accion: string): string {
   return `No se pudo ${accion}. Inténtalo de nuevo.`
 }
 
-export async function listarClientes(busqueda?: string): Promise<Resultado<Cliente[]>> {
-  const db = preparar()
-  if (esFallo(db)) return db
-
-  const termino = busqueda?.trim() ?? ''
-  const base = db.from('clientes').select(COLUMNAS)
-  const consulta = termino
-    ? base.or(`codigo.ilike."%${escaparFiltro(termino)}%",nombre.ilike."%${escaparFiltro(termino)}%"`)
-    : base
-
-  try {
-    const { data, error } = await consulta.order('codigo', { ascending: true })
-    if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
-    const clientes = leerClientes(data)
-    if (!clientes) return { ok: false, mensaje: 'No se pudo leer la lista de clientes.' }
-    return { ok: true, datos: clientes }
-  } catch (error) {
-    return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
-  }
-}
-
-/** Lista para Venta: incluye cuántas prendas tiene pedidas cada clienta. */
-export async function listarClientesVenta(busqueda?: string): Promise<Resultado<ClienteVenta[]>> {
+export async function listarClientes(busqueda?: string): Promise<Resultado<ClienteVenta[]>> {
   const db = preparar()
   if (esFallo(db)) return db
 
@@ -95,10 +74,14 @@ export async function listarClientesVenta(busqueda?: string): Promise<Resultado<
     if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
     const clientes = leerClientesVenta(data)
     if (!clientes) return { ok: false, mensaje: 'No se pudo leer la lista de clientes.' }
-    return { ok: true, datos: ordenarClientesVenta(clientes) }
+    return { ok: true, datos: ordenarPorCanasta(clientes) }
   } catch (error) {
     return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
   }
+}
+
+export async function listarClientesVenta(busqueda?: string): Promise<Resultado<ClienteVenta[]>> {
+  return listarClientes(busqueda)
 }
 
 export async function listarResumenAbonos(
@@ -118,7 +101,7 @@ export async function listarResumenAbonos(
     if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
     const clientes = leerResumenes(data)
     if (!clientes) return { ok: false, mensaje: 'No se pudo leer la lista de clientes.' }
-    return { ok: true, datos: clientes }
+    return { ok: true, datos: ordenarPorCanasta(clientes) }
   } catch (error) {
     return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
   }
@@ -309,6 +292,7 @@ export type Abono = {
 export type ResumenClienteAbono = Cliente & {
   total: number
   saldo: number
+  prendas: number
 }
 
 /** Registra el abono y suma el monto al saldo. Si el cliente estaba inactivo y queda saldo, pasa a activo. */
@@ -673,7 +657,12 @@ function leerResumenes(data: unknown): ResumenClienteAbono[] | null {
     const items = leerItemsCanasta((fila as Record<string, unknown>).canasta_items)
     if (!items) return null
     const total = totalCanasta(items)
-    clientes.push({ ...cliente, total, saldo: saldoPendiente(total, cliente.saldo_favor) })
+    clientes.push({
+      ...cliente,
+      total,
+      saldo: saldoPendiente(total, cliente.saldo_favor),
+      prendas: totalPrendas(items),
+    })
   }
   return clientes
 }
@@ -691,17 +680,6 @@ function leerItemsCanasta(valor: unknown): { precio: number; cantidad: number }[
     items.push({ precio: redondear2(precio), cantidad })
   }
   return items
-}
-
-function leerClientes(data: unknown): Cliente[] | null {
-  if (!Array.isArray(data)) return null
-  const clientes: Cliente[] = []
-  for (const fila of data) {
-    const cliente = leerCliente(fila)
-    if (!cliente) return null
-    clientes.push(cliente)
-  }
-  return clientes
 }
 
 function leerCliente(valor: unknown): Cliente | null {

@@ -66,12 +66,9 @@ export function puedeVender(estado: string): boolean {
   return estado === 'activo'
 }
 
-/** En Venta: activas primero y, dentro de cada estado, quien más prendas tiene pedidas. */
-export function ordenarClientesVenta<T extends { estado: string; prendas: number; codigo: string }>(
-  clientes: T[],
-): T[] {
-  return [...clientes].sort((a, b) => {
-    if (a.estado !== b.estado) return a.estado === 'activo' ? -1 : 1
+/** En todas las listas: primero quien más prendas tiene en la canasta. */
+export function ordenarPorCanasta<T extends { prendas: number; codigo: string }>(filas: T[]): T[] {
+  return [...filas].sort((a, b) => {
     if (a.prendas !== b.prendas) return b.prendas - a.prendas
     return a.codigo.localeCompare(b.codigo, 'es', { sensitivity: 'base' })
   })

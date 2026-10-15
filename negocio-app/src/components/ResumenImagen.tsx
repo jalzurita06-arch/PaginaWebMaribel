@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import { formatearDolares } from '../lib/dinero.ts'
 import type { GrupoPrecio } from '../lib/reglas.ts'
+import { LogoMarca } from './LogoMarca.tsx'
 
 type Props = {
   codigo: string
@@ -43,8 +44,9 @@ export function ResumenImagen({ codigo, nombre, fecha, grupos, abono, saldo, tot
         textAlign: 'left',
       }}
     >
-      {/* Espacio reservado para el logo. */}
-      <div aria-hidden="true" style={{ ...caja, height: 72 }} />
+      <div style={{ ...caja, width: 56, height: 56 }}>
+        <LogoMarca />
+      </div>
       <p style={{ ...caja, marginTop: 8, fontSize: 13 }}>{fecha}</p>
       <p
         style={{

@@ -3,6 +3,7 @@ import { formatearDolares, redondear2 } from '../lib/dinero.ts'
 import {
   agruparPorPrecio,
   calcularEnvio,
+  ordenarPorCanasta,
   saldoPendiente,
   totalCanasta,
   totalPrendas,
@@ -175,23 +176,24 @@ export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[
     porCliente.set(fila.clienteId, actual)
   }
 
-  return [...porCliente.entries()]
-    .map(([clienteId, datos]) => {
-      const grupos = agruparPorPrecio(datos.items)
-      const total = totalCanasta(grupos)
-      return {
-        clienteId,
-        codigo: datos.codigo,
-        nombre: datos.nombre,
-        saldoFavor: redondear2(Math.max(0, datos.saldoFavor)),
-        prendas: totalPrendas(grupos),
-        total,
-        saldo: saldoPendiente(total, datos.saldoFavor),
-        grupos,
-      }
-    })
-    .filter((canasta) => canasta.prendas > 0)
-    .sort((a, b) => a.codigo.localeCompare(b.codigo, 'es', { sensitivity: 'base' }))
+  return ordenarPorCanasta(
+    [...porCliente.entries()]
+      .map(([clienteId, datos]) => {
+        const grupos = agruparPorPrecio(datos.items)
+        const total = totalCanasta(grupos)
+        return {
+          clienteId,
+          codigo: datos.codigo,
+          nombre: datos.nombre,
+          saldoFavor: redondear2(Math.max(0, datos.saldoFavor)),
+          prendas: totalPrendas(grupos),
+          total,
+          saldo: saldoPendiente(total, datos.saldoFavor),
+          grupos,
+        }
+      })
+      .filter((canasta) => canasta.prendas > 0),
+  )
 }
 
 export async function listarCanastasAbiertas(): Promise<Resultado<CanastaAbierta[]>> {
