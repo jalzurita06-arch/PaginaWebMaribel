@@ -1,0 +1,9 @@
+{
+  "framework": "vite",
+  "installCommand": "cd negocio-app && npm install",
+  "buildCommand": "cd negocio-app && npm run build",
+  "outputDirectory": "negocio-app/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
