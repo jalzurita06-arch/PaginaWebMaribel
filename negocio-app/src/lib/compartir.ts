@@ -155,6 +155,32 @@ export function nombreArchivoPedido(codigo: string): string {
   return `pedido-${limpio || 'cliente'}.png`
 }
 
+/**
+ * En el celular la imagen solo se adjunta si el menú de compartir la acepta.
+ * El mensaje va junto cuando el navegador lo permite; si no, se manda solo el archivo.
+ * Un enlace de WhatsApp no puede llevar la imagen.
+ */
+export function datosParaCompartir(
+  archivo: File,
+  texto: string,
+  puede: (datos: ShareData) => boolean,
+): ShareData | null {
+  const conTexto: ShareData = { files: [archivo], text: texto }
+  const soloArchivo: ShareData = { files: [archivo] }
+
+  if (consultaCompartir(puede, conTexto)) return conTexto
+  if (consultaCompartir(puede, soloArchivo)) return soloArchivo
+  return null
+}
+
+function consultaCompartir(puede: (datos: ShareData) => boolean, datos: ShareData): boolean {
+  try {
+    return puede(datos)
+  } catch {
+    return false
+  }
+}
+
 /** Deja la venta en la ruta para compartir solo esas prendas. */
 export function codificarVenta(items: ItemCanasta[]): string {
   return items.map((item) => `${redondear2(item.precio)}x${item.cantidad}`).join(',')

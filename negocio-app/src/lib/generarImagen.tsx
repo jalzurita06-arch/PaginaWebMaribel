@@ -94,6 +94,48 @@ export async function generarImagen(clienteId: string, venta?: ItemCanasta[]): P
   }
 }
 
+/** JPEG con los bytes ya leídos: WhatsApp en el celular suele ignorar un PNG compartido. */
+export async function prepararArchivoCompartir(imagen: Blob, nombrePng: string): Promise<File> {
+  const png = imagen.type === 'image/png' ? imagen : new Blob([imagen], { type: 'image/png' })
+  try {
+    const jpeg = await convertirPngAJpeg(png)
+    const bytes = await jpeg.arrayBuffer()
+    return new File([bytes], nombrePng.replace(/\.png$/i, '.jpg'), {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    })
+  } catch {
+    const bytes = await png.arrayBuffer()
+    return new File([bytes], nombrePng, { type: 'image/png', lastModified: Date.now() })
+  }
+}
+
+async function convertirPngAJpeg(png: Blob): Promise<Blob> {
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') {
+    throw new Error('Este navegador no puede preparar la imagen para compartir.')
+  }
+
+  const bitmap = await createImageBitmap(png)
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const contexto = canvas.getContext('2d')
+    if (!contexto) throw new Error('Este navegador no puede preparar la imagen para compartir.')
+    contexto.fillStyle = '#ffffff'
+    contexto.fillRect(0, 0, canvas.width, canvas.height)
+    contexto.drawImage(bitmap, 0, 0)
+
+    const jpeg = await new Promise<Blob | null>((resolver) => {
+      canvas.toBlob((resultado) => resolver(resultado), 'image/jpeg', 0.92)
+    })
+    if (!jpeg || jpeg.size === 0) throw new Error('No se pudo preparar la imagen para compartir.')
+    return jpeg
+  } finally {
+    bitmap.close()
+  }
+}
+
 function siguienteFrame(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => resolve())

@@ -3,6 +3,7 @@ import {
   abrirChatWhatsApp,
   codificarVenta,
   datosBancariosListos,
+  datosParaCompartir,
   esCelular,
   formatearFechaRecibo,
   leerVenta,
@@ -199,6 +200,30 @@ describe('venta para compartir', () => {
     expect(leerVenta('5')).toBeNull()
     expect(leerVenta('0x2')).toBeNull()
     expect(leerVenta('5x0')).toBeNull()
+  })
+})
+
+describe('datos para compartir en el celular', () => {
+  const archivo = new File([Uint8Array.from([1, 2, 3])], 'pedido.jpg', { type: 'image/jpeg' })
+
+  it('manda la imagen y el mensaje cuando el celular acepta los dos', () => {
+    expect(datosParaCompartir(archivo, 'hola', () => true)).toEqual({ files: [archivo], text: 'hola' })
+  })
+
+  it('manda solo la imagen si el mensaje haría que se rechace el archivo', () => {
+    expect(datosParaCompartir(archivo, 'hola', (datos) => datos.text == null)).toEqual({ files: [archivo] })
+  })
+
+  it('no arma datos si el celular no puede compartir archivos', () => {
+    expect(datosParaCompartir(archivo, 'hola', () => false)).toBeNull()
+  })
+
+  it('sigue con la imagen si preguntar por el mensaje falla', () => {
+    const datos = datosParaCompartir(archivo, 'hola', (dato) => {
+      if (dato.text) throw new Error('no')
+      return true
+    })
+    expect(datos).toEqual({ files: [archivo] })
   })
 })
 
