@@ -1,35 +1,23 @@
 import type { CSSProperties } from 'react'
+import logoCompleto from '../assets/logo-completo.png'
+import logoMarca from '../assets/logo-marca.png'
 
 type Props = {
   className?: string
   acento?: string
   estilo?: CSSProperties
+  variante?: 'icono' | 'completo'
 }
 
-/** Marca temporal: percha y vestido, hasta que se ponga el logo definitivo. */
-export function LogoMarca({ className = '', acento = '#E7C8A0', estilo }: Props) {
+export function LogoMarca({ className = '', estilo, variante = 'icono' }: Props) {
+  const esIcono = variante === 'icono'
   return (
-    <svg
-      viewBox="0 0 80 80"
-      className={className}
+    <img
+      src={esIcono ? logoMarca : logoCompleto}
+      alt="JM Lozada Fashion House"
+      className={esIcono ? `rounded-[28%] object-cover ${className}` : `object-contain ${className}`}
       style={estilo}
-      role="img"
-      aria-label="Fashion House"
-    >
-      <title>Fashion House</title>
-      <rect width="80" height="80" rx="22" fill={acento} />
-      <path
-        fill="#6B2C2C"
-        d="M32.2 37.2v5.2c0 1.4-.6 2.6-2.2 3.5L16.8 67h46.4L50 45.9c-1.6-.9-2.2-2.1-2.2-3.5v-5.2H32.2Z"
-      />
-      <path
-        fill="none"
-        stroke="#6B2C2C"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2.4"
-        d="M40 15.8c.2-4.6 7.4-4.8 7.6.4M40 16.2v7.2M40 23.4 19.6 37.2h40.8L40 23.4Z"
-      />
-    </svg>
+      draggable={false}
+    />
   )
 }

@@ -22,7 +22,7 @@ const inicio: Seccion = {
 
 const destinos: Seccion[] = [inicio, ...menuInicio]
 
-export function MenuNavegacion({ acento }: { acento: string }) {
+export function MenuNavegacion() {
   const { pathname } = useLocation()
   const { irA } = useTransicion()
   const reducirMovimiento = useReducedMotion()
@@ -203,7 +203,10 @@ export function MenuNavegacion({ acento }: { acento: string }) {
         transition={{ duration: 0.15 }}
         className="rounded-3xl [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
       >
-        <LogoMarca acento={acento} className="size-12 drop-shadow-sm lg:size-20" />
+        <LogoMarca
+          variante="completo"
+          className="h-14 w-auto max-w-[6.75rem] drop-shadow-sm lg:h-20 lg:max-w-[9.5rem]"
+        />
       </motion.button>
       {panel}
     </div>

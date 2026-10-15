@@ -67,6 +67,8 @@ export async function generarImagen(clienteId: string, venta?: ItemCanasta[]): P
       throw new Error('No se pudo preparar la imagen del pedido.')
     }
 
+    await esperarImagenes(nodo)
+
     const restaurarEstilos = instalarEstilosCompatibles()
     let blob: Blob | null
     try {
@@ -140,6 +142,15 @@ function siguienteFrame(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => resolve())
   })
+}
+
+function esperarImagenes(nodo: HTMLElement): Promise<void[]> {
+  return Promise.all(
+    [...nodo.querySelectorAll('img')].map((imagen) => {
+      if (imagen.complete && imagen.naturalWidth > 0) return Promise.resolve()
+      return imagen.decode().then(() => undefined).catch(() => undefined)
+    }),
+  )
 }
 
 /**

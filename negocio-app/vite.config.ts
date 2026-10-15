@@ -13,6 +13,8 @@ export default defineConfig({
         'favicon.svg',
         'favicon-32.png',
         'logo.svg',
+        'logo-marca.png',
+        'logo-completo.png',
         'apple-touch-icon.png',
         'pwa-192x192.png',
         'pwa-512x512.png',
@@ -28,19 +30,19 @@ export default defineConfig({
         lang: 'es',
         icons: [
           {
-            src: 'pwa-192x192.png?v=3',
+            src: 'pwa-192x192.png?v=4',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: 'pwa-512x512.png?v=3',
+            src: 'pwa-512x512.png?v=4',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: 'pwa-512x512-maskable.png?v=3',
+            src: 'pwa-512x512-maskable.png?v=4',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

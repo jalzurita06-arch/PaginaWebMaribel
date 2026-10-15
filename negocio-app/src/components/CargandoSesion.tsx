@@ -1,4 +1,3 @@
-import { acentoInicio } from '../config/secciones.ts'
 import { LogoMarca } from './LogoMarca.tsx'
 
 /** Se muestra mientras supabase-js lee la sesión guardada al abrir la app. */
@@ -9,7 +8,7 @@ export function CargandoSesion() {
       aria-busy="true"
     >
       <div className="flex flex-col items-center gap-5">
-        <LogoMarca acento={acentoInicio} className="size-20 drop-shadow-sm" />
+        <LogoMarca variante="completo" className="h-20 w-auto drop-shadow-sm" />
         <p role="status" className="text-sm uppercase tracking-[0.28em]">
           Revisando la sesión
         </p>

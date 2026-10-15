@@ -20,7 +20,7 @@ type LayoutProps = {
 
 const toque = { scale: 0.97 }
 
-export function Layout({ titulo, subtitulo, acento, onAtras, children }: LayoutProps) {
+export function Layout({ titulo, subtitulo, acento: _acento, onAtras, children }: LayoutProps) {
   const { pathname } = useLocation()
   const reducirMovimiento = useReducedMotion()
   const esInicio = pathname === '/'
@@ -44,11 +44,14 @@ export function Layout({ titulo, subtitulo, acento, onAtras, children }: LayoutP
         <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 lg:gap-x-8 lg:gap-y-4">
           <div className="col-start-1 row-start-1">
             {pathname === '/login' ? (
-              <LogoMarca acento={acento} className="size-12 shrink-0 drop-shadow-sm lg:size-20" />
+              <LogoMarca
+                variante="completo"
+                className="h-14 w-auto max-w-[6.75rem] shrink-0 drop-shadow-sm lg:h-20 lg:max-w-[9.5rem]"
+              />
             ) : mostrarVolver ? (
               <BotonVolver reducirMovimiento={reducirMovimiento} onAtras={onAtras} />
             ) : (
-              <MenuNavegacion acento={acento} />
+              <MenuNavegacion />
             )}
           </div>
           {esInicio ? (
@@ -64,7 +67,7 @@ export function Layout({ titulo, subtitulo, acento, onAtras, children }: LayoutP
             </motion.button>
           ) : mostrarVolver ? (
             <div className="col-start-3 row-start-1 justify-self-end">
-              <MenuNavegacion acento={acento} />
+              <MenuNavegacion />
             </div>
           ) : null}
           <div

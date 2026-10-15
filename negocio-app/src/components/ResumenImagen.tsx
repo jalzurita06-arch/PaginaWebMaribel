@@ -73,7 +73,10 @@ export function ResumenImagen({ codigo, nombre, fecha, grupos, abono, saldo, tot
           ) : null}
           {concepto ? <p style={{ ...caja, marginTop: 8, fontSize: 14 }}>{concepto}</p> : null}
         </div>
-        <LogoMarca estilo={{ display: 'block', width: 56, height: 56, flexShrink: 0 }} />
+        <LogoMarca
+          variante="completo"
+          estilo={{ display: 'block', width: 118, height: 'auto', flexShrink: 0 }}
+        />
       </div>
 
       <Regla />
