@@ -1,14 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { House } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { acentoInicio, menuInicio, type Seccion } from '../config/secciones.ts'
+import { useTransicion } from '../context/useTransicion.ts'
 import { LogoMarca } from './LogoMarca.tsx'
+import { transicionDesplegar } from './PanelDesplegable.tsx'
 
 const Enlace = motion.create(Link)
 const toque = { scale: 0.97 }
-const consultaPc = '(min-width: 1024px)'
+const consultaPc = '(min-width: 980px)'
 
 const inicio: Seccion = {
   nombre: 'Inicio',
@@ -22,6 +24,7 @@ const destinos: Seccion[] = [inicio, ...menuInicio]
 
 export function MenuNavegacion({ acento }: { acento: string }) {
   const { pathname } = useLocation()
+  const { irA } = useTransicion()
   const reducirMovimiento = useReducedMotion()
   const menuId = useId()
   const refBoton = useRef<HTMLButtonElement>(null)
@@ -43,10 +46,7 @@ export function MenuNavegacion({ acento }: { acento: string }) {
   }, [pathname])
 
   useEffect(() => {
-    if (!abierto) {
-      setCaja(null)
-      return
-    }
+    if (!abierto) return
 
     function ubicar() {
       const boton = refBoton.current?.getBoundingClientRect()
@@ -99,64 +99,95 @@ export function MenuNavegacion({ acento }: { acento: string }) {
   }, [abierto])
 
   const ancladoDerecha = caja != null && caja.left > window.innerWidth / 2
+  const salto = reducirMovimiento === true
+  const mostrar = abierto && (esPc ? caja : true)
+  const transicion = salto ? { duration: 0 } : transicionDesplegar
 
-  const panel =
-    abierto && (esPc ? caja : true)
-      ? createPortal(
-          <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby={menuId}>
-            <button
-              type="button"
-              aria-label="Cerrar menú"
-              onClick={() => setAbierto(false)}
-              className="absolute inset-0 bg-black/25 lg:bg-black/10"
-            />
-            <nav
-              ref={refPanel}
-              id={menuId}
-              aria-label="Secciones"
-              className={
-                esPc
-                  ? 'absolute flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2 rounded-3xl bg-white p-3 shadow-md'
-                  : 'absolute inset-x-0 bottom-0 flex max-h-[min(88dvh,40rem)] flex-col gap-2 overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-md'
-              }
-              style={
-                esPc && caja
-                  ? {
-                      top: caja.top,
-                      ...(ancladoDerecha ? { right: caja.right } : { left: Math.max(16, caja.left) }),
+  const panel = createPortal(
+    <AnimatePresence>
+      {mostrar ? (
+        <motion.div
+          key="menu"
+          className="fixed inset-0 z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={menuId}
+          initial={salto ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={transicion}
+        >
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            onClick={() => setAbierto(false)}
+            className="absolute inset-0 bg-black/25 lg:bg-black/10"
+          />
+          <motion.nav
+            ref={refPanel}
+            id={menuId}
+            aria-label="Secciones"
+            initial={salto ? false : { opacity: 0, y: esPc ? -8 : 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: esPc ? -8 : 24 }}
+            transition={transicion}
+            className={
+              esPc
+                ? 'absolute flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2 rounded-3xl bg-white p-3 shadow-md'
+                : 'absolute inset-x-0 bottom-0 flex max-h-[min(88dvh,40rem)] flex-col gap-2 overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-md'
+            }
+            style={
+              esPc && caja
+                ? {
+                    top: caja.top,
+                    ...(ancladoDerecha ? { right: caja.right } : { left: Math.max(16, caja.left) }),
+                  }
+                : undefined
+            }
+          >
+            <p className="px-2 pb-1 text-sm uppercase tracking-[0.28em] text-black/60">Ir a</p>
+            {destinos.map((seccion) => {
+              const actual = esRutaActual(pathname, seccion.ruta)
+              const Icono = seccion.icono
+              return (
+                <Enlace
+                  key={seccion.ruta}
+                  to={seccion.ruta}
+                  aria-current={actual ? 'page' : undefined}
+                  onClick={(evento) => {
+                    setAbierto(false)
+                    if (
+                      evento.button !== 0 ||
+                      evento.metaKey ||
+                      evento.ctrlKey ||
+                      evento.shiftKey ||
+                      evento.altKey
+                    ) {
+                      return
                     }
-                  : undefined
-              }
-            >
-              <p className="px-2 pb-1 text-sm uppercase tracking-[0.28em] text-black/60">Ir a</p>
-              {destinos.map((seccion) => {
-                const actual = esRutaActual(pathname, seccion.ruta)
-                const Icono = seccion.icono
-                return (
-                  <Enlace
-                    key={seccion.ruta}
-                    to={seccion.ruta}
-                    aria-current={actual ? 'page' : undefined}
-                    onClick={() => setAbierto(false)}
-                    whileTap={reducirMovimiento ? undefined : toque}
-                    transition={{ duration: 0.15 }}
-                    className={`flex min-h-14 w-full touch-manipulation items-center gap-3 rounded-full px-4 [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${actual ? 'ring-2 ring-inset ring-black/40' : ''}`}
-                    style={{ backgroundColor: seccion.acento }}
-                  >
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/60">
-                      <Icono aria-hidden size={20} strokeWidth={2} />
-                    </span>
-                    <span className="font-display text-2xl uppercase leading-none tracking-wide">
-                      {seccion.nombre}
-                    </span>
-                  </Enlace>
-                )
-              })}
-            </nav>
-          </div>,
-          document.body,
-        )
-      : null
+                    evento.preventDefault()
+                    irA(seccion.ruta, seccion.acento)
+                  }}
+                  whileTap={reducirMovimiento ? undefined : toque}
+                  transition={{ duration: 0.15 }}
+                  className={`flex min-h-12 w-full touch-manipulation items-center gap-3 rounded-full px-4 [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black lg:min-h-14 ${actual ? 'ring-2 ring-inset ring-black/40' : ''}`}
+                  style={{ backgroundColor: seccion.acento }}
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/60 lg:size-10">
+                    <Icono aria-hidden size={18} strokeWidth={2} />
+                  </span>
+                  <span className="font-display text-xl uppercase leading-none tracking-wide lg:text-2xl">
+                    {seccion.nombre}
+                  </span>
+                </Enlace>
+              )
+            })}
+          </motion.nav>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
+    document.body,
+  )
 
   return (
     <div className="relative shrink-0">
@@ -172,7 +203,7 @@ export function MenuNavegacion({ acento }: { acento: string }) {
         transition={{ duration: 0.15 }}
         className="rounded-3xl [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
       >
-        <LogoMarca acento={acento} className="size-16 drop-shadow-sm lg:size-20" />
+        <LogoMarca acento={acento} className="size-12 drop-shadow-sm lg:size-20" />
       </motion.button>
       {panel}
     </div>

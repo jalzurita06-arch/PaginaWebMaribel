@@ -1,8 +1,10 @@
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Bell, Pencil } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { VistaAnimada } from '../components/PanelDesplegable.tsx'
+import { Pencil } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
+import { CampanaAbono } from '../components/CampanaAbono.tsx'
 import { EtiquetaEstado } from '../components/EtiquetaEstado.tsx'
 import { FormularioAbono } from '../components/FormularioAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
@@ -10,6 +12,11 @@ import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { abonoAtrasado } from '../lib/abonoAtrasado.ts'
+import { coincideCliente } from '../lib/busqueda.ts'
+import { CLAVE_FECHAS_ABONO, CLAVE_RESUMEN_ABONOS, claveDetalleAbono, leerCache, reemplazarCache } from '../lib/cacheLectura.ts'
+import { subirAlInicio } from '../lib/dispositivo.ts'
+import { useDatos } from '../lib/useDatos.ts'
+import { estadoCanastaAbierta, vieneDeCanasta } from '../lib/navegacion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
 import { excedenteAbono, mensajeAbonoRegistrado, saldoPendiente, totalCanasta } from '../lib/reglas.ts'
 import {
@@ -17,8 +24,8 @@ import {
   editarAbono,
   listarAbonos,
   listarCanastaCliente,
+  listarFechasAbono,
   listarResumenAbonos,
-  listarUltimosAbonos,
   obtenerCliente,
   type Abono,
   type Cliente,
@@ -38,19 +45,27 @@ const boton =
 const toque = { scale: 0.97 }
 const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
+type DetalleGuardado = { cliente: Cliente; total: number; abonos: Abono[] }
+
 export function Abonos() {
   const { nombre, subtitulo, acento } = secciones.abonos
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const clienteId = params.get('cliente')
+  const desdeCanasta = vieneDeCanasta('/abonos', params)
   const [busqueda, setBusqueda] = useState('')
-  const [consulta, setConsulta] = useState('')
   const [recargaLista, setRecargaLista] = useState(0)
   const [recargaDetalle, setRecargaDetalle] = useState(0)
-  const [clientes, setClientes] = useState<ResumenClienteAbono[]>([])
-  const [ultimosAbonos, setUltimosAbonos] = useState<Record<string, string> | null>(null)
-  const [cargandoLista, setCargandoLista] = useState(true)
+  const resumen = useDatos(CLAVE_RESUMEN_ABONOS, () => listarResumenAbonos(), recargaLista, !clienteId)
+  const fechas = useDatos(CLAVE_FECHAS_ABONO, () => listarFechasAbono(), recargaLista, !clienteId)
+  const consulta = busqueda.trim()
+  const clientes = useMemo(
+    () => (resumen.datos ?? []).filter((fila) => coincideCliente(consulta, fila.codigo, fila.nombre)),
+    [consulta, resumen.datos],
+  )
+  const cargandoLista = resumen.esperando && clientes.length === 0
+  const errorLista = resumen.error
   const [claveCargada, setClaveCargada] = useState<string | null>(null)
-  const [errorLista, setErrorLista] = useState<string | null>(null)
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [total, setTotal] = useState<number | null>(null)
   const [abonos, setAbonos] = useState<Abono[]>([])
@@ -59,42 +74,15 @@ export function Abonos() {
   const [modo, setModo] = useState<ModoFormulario | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [aviso, setAviso] = useState<AvisoEstado | null>(null)
+  const epocaDetalle = useRef(0)
 
   useEffect(() => {
-    const tiempo = window.setTimeout(() => setConsulta(busqueda.trim()), 250)
-    return () => window.clearTimeout(tiempo)
-  }, [busqueda])
-
-  useEffect(() => {
-    if (clienteId) return
-    let vigente = true
-
-    void (async () => {
-      setCargandoLista(true)
-      setErrorLista(null)
-      setUltimosAbonos(null)
-      const resultado = await listarResumenAbonos(consulta)
-      if (!vigente) return
-      const fechas = resultado.ok ? await listarUltimosAbonos(resultado.datos.map((fila) => fila.id)) : null
-      if (!vigente) return
-      setCargandoLista(false)
-      if (!resultado.ok) {
-        setClientes([])
-        setUltimosAbonos(null)
-        setErrorLista(resultado.mensaje)
-        return
-      }
-      setClientes(resultado.datos)
-      setUltimosAbonos(fechas?.ok ? fechas.datos : null)
-      setErrorLista(null)
-      if (fechas && !fechas.ok) setAviso({ texto: fechas.mensaje, tono: 'error' })
-      else setAviso((actual) => (actual?.tono === 'error' ? null : actual))
-    })()
-
-    return () => {
-      vigente = false
+    if (!fechas.error) {
+      setAviso((actual) => (actual?.tono === 'error' ? null : actual))
+      return
     }
-  }, [clienteId, consulta, recargaLista])
+    setAviso({ texto: fechas.error, tono: 'error' })
+  }, [fechas.error])
 
   const claveDetalle = clienteId == null ? null : `${clienteId}:${recargaDetalle}`
 
@@ -102,41 +90,59 @@ export function Abonos() {
     if (!clienteId || !claveDetalle || claveCargada === claveDetalle) return
 
     let vigente = true
+    const marca = epocaDetalle.current
     const clave = claveDetalle
     const id = clienteId
+    const guardado = leerCache<DetalleGuardado>(claveDetalleAbono(id))
+    if (guardado) {
+      setCliente(guardado.cliente)
+      setTotal(guardado.total)
+      setAbonos(guardado.abonos)
+      setErrorDetalle(null)
+      setErrorAbonos(null)
+    }
 
     void (async () => {
-      const clienteResultado = await obtenerCliente(id)
-      if (!vigente) return
+      const [clienteResultado, canastaResultado, abonosResultado] = await Promise.all([
+        obtenerCliente(id),
+        listarCanastaCliente(id),
+        listarAbonos(id),
+      ])
+      if (!vigente || epocaDetalle.current !== marca) return
       if (!clienteResultado.ok) {
-        setCliente(null)
-        setTotal(null)
-        setAbonos([])
-        setErrorDetalle({ id, texto: clienteResultado.mensaje })
-        setErrorAbonos(null)
+        if (!guardado) {
+          setCliente(null)
+          setTotal(null)
+          setAbonos([])
+          setErrorDetalle({ id, texto: clienteResultado.mensaje })
+          setErrorAbonos(null)
+        }
         setClaveCargada(clave)
         return
       }
 
-      const [canastaResultado, abonosResultado] = await Promise.all([
-        listarCanastaCliente(id),
-        listarAbonos(id),
-      ])
-      if (!vigente) return
       setCliente(clienteResultado.datos)
+      const totalNuevo = canastaResultado.ok ? totalCanasta(canastaResultado.datos) : null
       if (!canastaResultado.ok) {
-        setTotal(null)
+        if (!guardado) setTotal(null)
         setErrorDetalle({ id, texto: canastaResultado.mensaje })
       } else {
-        setTotal(totalCanasta(canastaResultado.datos))
+        setTotal(totalNuevo)
         setErrorDetalle(null)
       }
       if (!abonosResultado.ok) {
-        setAbonos([])
+        if (!guardado) setAbonos([])
         setErrorAbonos({ id, texto: abonosResultado.mensaje })
       } else {
         setAbonos(abonosResultado.datos)
         setErrorAbonos(null)
+      }
+      if (canastaResultado.ok && abonosResultado.ok && totalNuevo != null) {
+        reemplazarCache(claveDetalleAbono(id), {
+          cliente: clienteResultado.datos,
+          total: totalNuevo,
+          abonos: abonosResultado.datos,
+        })
       }
       setClaveCargada(clave)
     })()
@@ -146,15 +152,14 @@ export function Abonos() {
     }
   }, [clienteId, claveDetalle, claveCargada])
 
-  function sinAbono(clienteId: string) {
-    if (!ultimosAbonos) return false
-    return abonoAtrasado(ultimosAbonos[clienteId], new Date())
+  function sinAbono(id: string) {
+    if (!fechas.datos) return false
+    return abonoAtrasado(fechas.datos[id], new Date())
   }
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
     setAviso({ texto, tono })
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+    subirAlInicio()
   }
 
   function elegirCliente(id: string) {
@@ -166,6 +171,10 @@ export function Abonos() {
   function volverABuscar() {
     setAviso(null)
     setModo(null)
+    if (desdeCanasta) {
+      navigate('/canasta', { replace: true, state: estadoCanastaAbierta(clienteId) })
+      return
+    }
     setParams({})
   }
 
@@ -186,11 +195,18 @@ export function Abonos() {
 
     const lista = await listarAbonos(cliente.id)
     setOcupado(false)
+    epocaDetalle.current += 1
+    setRecargaLista((valor) => valor + 1)
     setCliente(resultado.datos)
     setModo(null)
     if (lista.ok) {
       setAbonos(lista.datos)
       setErrorAbonos(null)
+      reemplazarCache(claveDetalleAbono(cliente.id), {
+        cliente: resultado.datos,
+        total,
+        abonos: lista.datos,
+      })
     } else {
       setErrorAbonos({ id: cliente.id, texto: lista.mensaje })
     }
@@ -217,11 +233,20 @@ export function Abonos() {
 
     const lista = await listarAbonos(cliente.id)
     setOcupado(false)
+    epocaDetalle.current += 1
+    setRecargaLista((valor) => valor + 1)
     setCliente(resultado.datos)
     setModo(null)
     if (lista.ok) {
       setAbonos(lista.datos)
       setErrorAbonos(null)
+      if (total != null) {
+        reemplazarCache(claveDetalleAbono(cliente.id), {
+          cliente: resultado.datos,
+          total,
+          abonos: lista.datos,
+        })
+      }
     } else {
       setErrorAbonos({ id: cliente.id, texto: lista.mensaje })
     }
@@ -231,16 +256,33 @@ export function Abonos() {
   }
 
   const detalleVisible = cliente != null && cliente.id === clienteId
+  const detalleListo = detalleVisible && total != null
   const modoVisible = modo?.clienteId === clienteId ? modo : null
   const formularioAbierto = modoVisible != null && detalleVisible
   const textoErrorDetalle = errorDetalle?.id === clienteId ? errorDetalle.texto : null
   const textoErrorAbonos = errorAbonos?.id === clienteId ? errorAbonos.texto : null
-  const cargandoDetalleVisible = claveDetalle != null && claveCargada !== claveDetalle
+  const cargandoDetalleVisible = claveDetalle != null && claveCargada !== claveDetalle && !detalleListo
+
+  const claveVista = formularioAbierto ? 'formulario' : clienteId ? `detalle-${clienteId}` : 'buscar'
+
+  function atrasAbonos() {
+    if (formularioAbierto) {
+      setModo(null)
+      return
+    }
+    volverABuscar()
+  }
 
   return (
-    <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
+    <Layout
+      titulo={nombre}
+      subtitulo={subtitulo}
+      acento={acento}
+      onAtras={clienteId ? atrasAbonos : undefined}
+    >
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
 
+      <VistaAnimada vistaKey={claveVista}>
       {formularioAbierto && cliente && modoVisible ? (
         <FormularioAbono
           key={modoVisible.tipo === 'editar' ? modoVisible.abono.id : 'nuevo'}
@@ -276,7 +318,6 @@ export function Abonos() {
               ? abonoAtrasado(abonos[0]?.fecha, new Date())
               : false
           }
-          onVolver={volverABuscar}
           onReintentar={() => setRecargaDetalle((valor) => valor + 1)}
           onAgregar={() => {
             setAviso(null)
@@ -298,11 +339,12 @@ export function Abonos() {
           sinAbono={sinAbono}
           error={errorLista}
           onBusqueda={setBusqueda}
-          onBuscarYa={() => setConsulta(busqueda.trim())}
+          onBuscarYa={() => {}}
           onElegir={(elegido) => elegirCliente(elegido.id)}
           onReintentar={() => setRecargaLista((valor) => valor + 1)}
         />
       ) : null}
+      </VistaAnimada>
     </Layout>
   )
 }
@@ -388,15 +430,15 @@ function Buscador({
             >
               <span className="flex items-start justify-between gap-4">
                 <span className="flex min-w-0 flex-1 items-baseline gap-3">
-                  <span className="shrink-0 font-display text-4xl uppercase leading-none tracking-wide">
+                  <span className="shrink-0 font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
                     {cliente.codigo}
                   </span>
-                  <span className="flex min-w-0 items-center gap-1.5 text-sm">
-                    {cliente.nombre ? <span className="min-w-0 truncate">{cliente.nombre}</span> : null}
-                    {atrasado ? <CampanaAbono /> : null}
-                  </span>
+                  {cliente.nombre ? <span className="min-w-0 truncate text-sm">{cliente.nombre}</span> : null}
                 </span>
-                <EtiquetaEstado estado={cliente.estado} />
+                <span className="flex shrink-0 items-center gap-2">
+                  {atrasado ? <CampanaAbono /> : null}
+                  <EtiquetaEstado estado={cliente.estado} />
+                </span>
               </span>
               <span className="grid grid-cols-3 gap-2">
                 <Cifra etiqueta="Total" valor={cliente.total} />
@@ -412,15 +454,6 @@ function Buscador({
   )
 }
 
-function CampanaAbono() {
-  return (
-    <span className="inline-flex shrink-0" title="Sin abono en 5 días">
-      <Bell aria-hidden size={16} strokeWidth={2.25} />
-      <span className="sr-only">Sin abono en los últimos 5 días</span>
-    </span>
-  )
-}
-
 function DetalleAbono({
   acento,
   cliente,
@@ -430,7 +463,6 @@ function DetalleAbono({
   errorDetalle,
   errorAbonos,
   sinAbono,
-  onVolver,
   onReintentar,
   onAgregar,
   onEditar,
@@ -443,7 +475,6 @@ function DetalleAbono({
   errorDetalle: string | null
   errorAbonos: string | null
   sinAbono: boolean
-  onVolver: () => void
   onReintentar: () => void
   onAgregar: () => void
   onEditar: (abono: Abono) => void
@@ -453,15 +484,6 @@ function DetalleAbono({
 
   return (
     <div className="flex flex-col gap-5">
-      <button
-        type="button"
-        onClick={onVolver}
-        className="inline-flex min-h-11 w-fit touch-manipulation items-center gap-2 rounded-full bg-black/5 px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-      >
-        <ArrowLeft aria-hidden size={18} strokeWidth={2} />
-        Buscar otro
-      </button>
-
       {cargando ? <IndicadorCarga>Cargando cliente…</IndicadorCarga> : null}
 
       {!cargando && errorDetalle ? (
@@ -479,17 +501,15 @@ function DetalleAbono({
           className={`flex flex-col gap-5 rounded-3xl p-5 shadow-sm lg:p-8 ${sinAbono ? 'bg-peligro' : 'bg-white'}`}
         >
           <div className="flex items-start justify-between gap-4">
-            <h2 className="min-w-0 break-words font-display text-5xl uppercase leading-none tracking-wide">
+            <h2 className="min-w-0 break-words font-display text-3xl uppercase leading-none tracking-wide lg:text-5xl">
               {cliente.codigo}
             </h2>
-            <EtiquetaEstado estado={cliente.estado} />
-          </div>
-          {cliente.nombre || sinAbono ? (
-            <p className="flex items-center gap-1.5 break-words text-sm">
-              {cliente.nombre ? <span className="min-w-0 break-words">{cliente.nombre}</span> : null}
+            <span className="flex shrink-0 items-center gap-2">
               {sinAbono ? <CampanaAbono /> : null}
-            </p>
-          ) : null}
+              <EtiquetaEstado estado={cliente.estado} />
+            </span>
+          </div>
+          {cliente.nombre ? <p className="break-words text-sm">{cliente.nombre}</p> : null}
           {cliente.estado === 'inactivo' ? (
             <p className="text-sm leading-relaxed">
               Está inactivo. Si el abono deja saldo a favor, vuelve a estar activo.

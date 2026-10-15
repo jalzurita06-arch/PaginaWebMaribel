@@ -6,8 +6,10 @@
   --color-fondo: #f5f0e8;
   --color-afirmar: #d5e6c8;
   --color-peligro: #f3c1c1;
+  --color-alerta: #c1142e;
   --color-borrar: #f4a9a2;
   --color-aviso: #f6d7a8;
+  --breakpoint-lg: 980px;
 }
 
 body {
@@ -22,4 +24,22 @@ body {
   html {
     scroll-behavior: auto;
   }
+
+  html *,
+  html *::before,
+  html *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html.dispositivo-lento,
+html.dispositivo-lento *,
+html.dispositivo-lento *::before,
+html.dispositivo-lento *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

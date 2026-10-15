@@ -1,0 +1,15 @@
+---
+description: Dónde leer la cuenta de prueba para entrar a la app en el navegador o en pruebas de rendimiento
+alwaysApply: true
+---
+
+# Pruebas con sesión
+
+Para entrar a la app (pruebas en el navegador, rendimiento o cualquier flujo que pida login), lee el correo y la contraseña de `negocio-app/.env.pruebas.local`:
+
+- `PRUEBA_CORREO`
+- `PRUEBA_CONTRASENA`
+
+La pantalla de acceso es `/login`. El formulario pide correo y contraseña.
+
+No copies esas credenciales al código, a mensajes de commit, a reglas que se suben a git, ni a variables con prefijo `VITE_`. No las repitas en la respuesta salvo que Joshua lo pida. El archivo ya está cubierto por el `.gitignore` de `negocio-app`.

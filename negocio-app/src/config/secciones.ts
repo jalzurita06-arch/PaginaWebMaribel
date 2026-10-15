@@ -63,3 +63,28 @@ export const menuInicio: Seccion[] = [
   secciones.catalogo,
   secciones.abonos,
 ]
+
+export function claveSeccion(pathname: string): string {
+  if (pathname === '/' || pathname === '') return 'inicio'
+  if (pathname.startsWith('/venta') || pathname.startsWith('/compartir')) return 'venta'
+  if (pathname.startsWith('/canasta')) return 'canasta'
+  if (pathname.startsWith('/clientes')) return 'clientes'
+  if (pathname.startsWith('/catalogo')) return 'catalogo'
+  if (pathname.startsWith('/abonos')) return 'abonos'
+  return pathname
+}
+
+export function acentoDeRuta(pathname: string): string {
+  const clave = claveSeccion(pathname)
+  if (clave === 'inicio') return acentoInicio
+  if (clave === 'venta') return secciones.venta.acento
+  if (clave === 'canasta') return secciones.canasta.acento
+  if (clave === 'clientes') return secciones.clientes.acento
+  if (clave === 'catalogo') return secciones.catalogo.acento
+  if (clave === 'abonos') return secciones.abonos.acento
+  return acentoLogin
+}
+
+export function mismaSeccion(actual: string, destino: string): boolean {
+  return claveSeccion(actual) === claveSeccion(destino)
+}

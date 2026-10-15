@@ -5,11 +5,24 @@ export type ItemCanasta = {
   cantidad: number
 }
 
+export type ItemCanastaDia = ItemCanasta & {
+  fecha: string
+}
+
 export type GrupoPrecio = {
   precio: number
   cantidad: number
   subtotal: number
 }
+
+export type GrupoDia = {
+  fecha: string
+  prendas: number
+  total: number
+  grupos: GrupoPrecio[]
+}
+
+const DESFASE_ECUADOR_MS = -5 * 60 * 60 * 1000
 
 export type ResultadoEnvio = {
   nuevoSaldoFavor: number
@@ -60,6 +73,55 @@ export function agruparPorPrecio(items: ItemCanasta[]): GrupoPrecio[] {
     cantidad,
     subtotal: redondear2(precio * cantidad),
   }))
+}
+
+/**
+ * Fecha de compra en Ecuador (UTC−5, sin horario de verano).
+ * Si ya viene como YYYY-MM-DD, se deja igual.
+ */
+export function fechaDiaLocal(valor: string): string {
+  const texto = valor.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto
+  const iso = (texto.includes('T') ? texto : texto.replace(' ', 'T')).replace(
+    /([+-]\d{2})(?::?(\d{2}))?$/,
+    (_, horas: string, minutos?: string) => `${horas}:${minutos ?? '00'}`,
+  )
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) {
+    return /^(\d{4}-\d{2}-\d{2})/.exec(texto)?.[1] ?? ''
+  }
+  return new Date(date.getTime() + DESFASE_ECUADOR_MS).toISOString().slice(0, 10)
+}
+
+/** Junta las prendas por día de compra y, en cada día, por precio. El más reciente va primero. */
+export function agruparPorDia(items: ItemCanastaDia[]): GrupoDia[] {
+  const porFecha = new Map<string, ItemCanasta[]>()
+
+  for (const item of items) {
+    if (!(item.cantidad > 0)) continue
+    const fecha = /^\d{4}-\d{2}-\d{2}$/.test(item.fecha) ? item.fecha : ''
+    const actual = porFecha.get(fecha) ?? []
+    actual.push({ precio: item.precio, cantidad: item.cantidad })
+    porFecha.set(fecha, actual)
+  }
+
+  return [...porFecha.keys()]
+    .sort((a, b) => {
+      if (a === b) return 0
+      if (a === '') return 1
+      if (b === '') return -1
+      return a < b ? 1 : -1
+    })
+    .map((fecha) => {
+      const grupos = agruparPorPrecio(porFecha.get(fecha) ?? [])
+      return {
+        fecha,
+        prendas: totalPrendas(grupos),
+        total: totalCanasta(grupos),
+        grupos,
+      }
+    })
+    .filter((dia) => dia.prendas > 0)
 }
 
 export function puedeVender(estado: string): boolean {

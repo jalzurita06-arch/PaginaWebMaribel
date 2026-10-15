@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef } from 'react'
-import { ArrowLeft } from 'lucide-react'
 import { useConexion } from '../context/useConexion.ts'
 import { IndicadorCarga } from './IndicadorCarga.tsx'
 import { formatearDolares } from '../lib/dinero.ts'
@@ -13,7 +12,6 @@ type Props = {
   ocupado: boolean
   cargando?: boolean
   confirmacion: { prendas: PrendaCanasta[] | null; motivo: 'eliminar' | 'bloquear' } | null
-  onVolver: () => void
   onEditar: () => void
   onCambiarEstado: () => void
   onPedirEliminar: () => void
@@ -30,7 +28,6 @@ export function DetalleCliente({
   ocupado,
   cargando = false,
   confirmacion,
-  onVolver,
   onEditar,
   onCambiarEstado,
   onPedirEliminar,
@@ -59,19 +56,10 @@ export function DetalleCliente({
   return (
     <div className="flex flex-col gap-5">
       {cargando ? <IndicadorCarga>Cargando cliente…</IndicadorCarga> : null}
-      <button
-        type="button"
-        onClick={onVolver}
-        disabled={ocupado}
-        className="inline-flex min-h-11 w-fit touch-manipulation items-center gap-2 rounded-full bg-black/5 px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-      >
-        <ArrowLeft aria-hidden size={18} strokeWidth={2} />
-        Lista
-      </button>
 
       <article className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:p-8">
         <div className="flex items-start justify-between gap-4">
-          <h2 className="min-w-0 break-words font-display text-5xl uppercase leading-none tracking-wide">
+          <h2 className="min-w-0 break-words font-display text-3xl uppercase leading-none tracking-wide lg:text-5xl">
             {cliente.codigo}
           </h2>
           <EtiquetaEstado estado={cliente.estado} />

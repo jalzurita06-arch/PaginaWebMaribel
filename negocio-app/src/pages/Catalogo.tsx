@@ -5,6 +5,7 @@ import { FormularioValor } from '../components/FormularioValor.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { useConexion } from '../context/useConexion.ts'
+import { CLAVE_PRECIOS, leerCache, pedirDatos, reemplazarCache } from '../lib/cacheLectura.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { TarjetaPrecio } from '../components/TarjetaPrecio.tsx'
 import { secciones } from '../config/secciones.ts'
@@ -24,8 +25,8 @@ type Mensaje = { tipo: 'exito' | 'error'; texto: string }
 export function Catalogo() {
   const { nombre, subtitulo, acento } = secciones.catalogo
   const { enLinea } = useConexion()
-  const [precios, setPrecios] = useState<Precio[]>([])
-  const [cargando, setCargando] = useState(true)
+  const [precios, setPrecios] = useState<Precio[]>(() => leerCache<Precio[]>(CLAVE_PRECIOS) ?? [])
+  const [cargando, setCargando] = useState(() => leerCache<Precio[]>(CLAVE_PRECIOS) == null)
   const [errorCarga, setErrorCarga] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState<Mensaje | null>(null)
   const [agregando, setAgregando] = useState(false)
@@ -34,13 +35,20 @@ export function Catalogo() {
   const [ocupado, setOcupado] = useState(false)
   const [creandoEjemplo, setCreandoEjemplo] = useState(false)
 
+  function publicar(lista: Precio[]) {
+    reemplazarCache(CLAVE_PRECIOS, lista)
+    setPrecios(lista)
+  }
+
   async function cargar() {
-    setCargando(true)
+    if (precios.length === 0) setCargando(true)
     setErrorCarga(null)
-    const resultado = await listarPrecios()
+    const resultado = await pedirDatos(CLAVE_PRECIOS, listarPrecios, { fresco: true })
     if (!resultado.ok) {
-      setErrorCarga(resultado.mensaje)
-      setPrecios([])
+      if (leerCache<Precio[]>(CLAVE_PRECIOS) == null) {
+        setErrorCarga(resultado.mensaje)
+        setPrecios([])
+      }
     } else {
       setErrorCarga(null)
       setPrecios(resultado.datos)
@@ -51,18 +59,19 @@ export function Catalogo() {
   useEffect(() => {
     let activo = true
 
-    void (async () => {
-      const resultado = await listarPrecios()
+    void pedirDatos(CLAVE_PRECIOS, listarPrecios).then((resultado) => {
       if (!activo) return
       if (!resultado.ok) {
-        setErrorCarga(resultado.mensaje)
-        setPrecios([])
+        if (leerCache<Precio[]>(CLAVE_PRECIOS) == null) {
+          setErrorCarga(resultado.mensaje)
+          setPrecios([])
+        }
       } else {
         setErrorCarga(null)
         setPrecios(resultado.datos)
       }
       setCargando(false)
-    })()
+    })
 
     return () => {
       activo = false
@@ -95,7 +104,7 @@ export function Catalogo() {
     const lista = await listarPrecios()
     if (!lista.ok) fallar('El valor se guardó, pero no se pudo actualizar la lista.')
     else {
-      setPrecios(lista.datos)
+      publicar(lista.datos)
       setMensaje({ tipo: 'exito', texto: 'Valor agregado.' })
       setAgregando(false)
     }
@@ -118,7 +127,7 @@ export function Catalogo() {
     const lista = await listarPrecios()
     if (!lista.ok) fallar('El valor se actualizó, pero no se pudo actualizar la lista.')
     else {
-      setPrecios(lista.datos)
+      publicar(lista.datos)
       setMensaje({ tipo: 'exito', texto: 'Valor actualizado.' })
       setEditandoId(null)
     }
@@ -141,7 +150,7 @@ export function Catalogo() {
     const lista = await listarPrecios()
     if (!lista.ok) fallar('El valor se eliminó, pero no se pudo actualizar la lista.')
     else {
-      setPrecios(lista.datos)
+      publicar(lista.datos)
       setMensaje({ tipo: 'exito', texto: 'Valor eliminado.' })
       setEliminandoId(null)
     }
@@ -164,7 +173,7 @@ export function Catalogo() {
     const lista = await listarPrecios()
     if (!lista.ok) fallar('El orden cambió, pero no se pudo actualizar la lista.')
     else {
-      setPrecios(lista.datos)
+      publicar(lista.datos)
       setMensaje({ tipo: 'exito', texto: 'Orden actualizado.' })
     }
     setOcupado(false)
@@ -182,7 +191,7 @@ export function Catalogo() {
     const resultado = await crearPreciosDeEjemplo()
     if (!resultado.ok) fallar(resultado.mensaje)
     else {
-      setPrecios(resultado.datos)
+      publicar(resultado.datos)
       setMensaje({ tipo: 'exito', texto: 'Valores de ejemplo creados.' })
     }
     setCreandoEjemplo(false)

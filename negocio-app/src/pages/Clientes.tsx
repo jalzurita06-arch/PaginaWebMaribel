@@ -1,6 +1,7 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
+import { PanelDesplegable, transicionDesplegar, VistaAnimada } from '../components/PanelDesplegable.tsx'
 import { Plus } from 'lucide-react'
 import { Aviso } from '../components/Aviso.tsx'
 import { DetalleCliente } from '../components/DetalleCliente.tsx'
@@ -11,10 +12,14 @@ import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
+import { CLAVE_CLIENTES, reemplazarCache } from '../lib/cacheLectura.ts'
+import { coincideCliente } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
+import { subirAlInicio } from '../lib/dispositivo.ts'
+import { useDatos } from '../lib/useDatos.ts'
 import type { DatosEdicionCliente, DatosNuevoCliente } from '../lib/clienteFormulario.ts'
 import { formatearDolares } from '../lib/dinero.ts'
-import { excedenteAbono, mensajeAbonoRegistrado, totalCanasta } from '../lib/reglas.ts'
+import { excedenteAbono, mensajeAbonoRegistrado, ordenarPorCanasta, totalCanasta } from '../lib/reglas.ts'
 import {
   actualizarCliente,
   agregarAbono,
@@ -25,6 +30,7 @@ import {
   listarClientes,
   obtenerCliente,
   type Cliente,
+  type ClienteVenta,
   type EstadoCliente,
   type PrendaCanasta,
   type Resultado,
@@ -47,7 +53,7 @@ type Vista =
     }
 
 const toque = { scale: 0.97 }
-const consultaPc = '(min-width: 1024px)'
+const consultaPc = '(min-width: 980px)'
 
 function usePantallaPc() {
   const [esPc, setEsPc] = useState(() => window.matchMedia(consultaPc).matches)
@@ -69,11 +75,16 @@ export function Clientes() {
   const reducirMovimiento = useReducedMotion()
   const idBusqueda = useId()
   const [busqueda, setBusqueda] = useState('')
-  const [consulta, setConsulta] = useState('')
   const [recarga, setRecarga] = useState(0)
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [cargandoLista, setCargandoLista] = useState(true)
-  const [cargandoDetalle, setCargandoDetalle] = useState(false)
+  const lista = useDatos(CLAVE_CLIENTES, () => listarClientes(), recarga)
+  const [parche, setParche] = useState<ClienteVenta[] | null>(null)
+  const consulta = busqueda.trim()
+  const origen = parche ?? lista.datos ?? []
+  const clientes = useMemo(
+    () => origen.filter((cliente) => coincideCliente(consulta, cliente.codigo, cliente.nombre)),
+    [consulta, origen],
+  )
+  const cargandoLista = lista.esperando && clientes.length === 0
   const [aviso, setAviso] = useState<AvisoEstado | null>(null)
   const [vista, setVista] = useState<Vista>({ nombre: 'lista' })
   const [ocupado, setOcupado] = useState(false)
@@ -82,37 +93,37 @@ export function Clientes() {
   const accion = useRef(false)
 
   useEffect(() => {
-    const tiempo = window.setTimeout(() => setConsulta(busqueda.trim()), 250)
-    return () => window.clearTimeout(tiempo)
-  }, [busqueda])
+    setParche(null)
+  }, [lista.datos])
+
+  function listaLocal(): ClienteVenta[] {
+    return parche ?? lista.datos ?? []
+  }
+
+  function publicarLista(siguiente: ClienteVenta[]) {
+    const ordenada = ordenarPorCanasta(siguiente)
+    reemplazarCache(CLAVE_CLIENTES, ordenada)
+    setParche(ordenada)
+    setRecarga((valor) => valor + 1)
+  }
+
+  function anotarCliente(cliente: Cliente) {
+    publicarLista(
+      listaLocal().map((item) => (item.id === cliente.id ? { ...item, ...cliente } : item)),
+    )
+  }
 
   useEffect(() => {
-    let vigente = true
-
-    async function cargar() {
-      setCargandoLista(true)
+    if (!lista.error) {
       setAviso((actual) => (actual?.tono === 'error' ? null : actual))
-      const resultado = await listarClientes(consulta)
-      if (!vigente) return
-      setCargandoLista(false)
-      if (!resultado.ok) {
-        setAviso({ texto: resultado.mensaje, tono: 'error' })
-        return
-      }
-      setClientes(resultado.datos)
-      setAviso((actual) => (actual?.tono === 'error' ? null : actual))
+      return
     }
-
-    void cargar()
-    return () => {
-      vigente = false
-    }
-  }, [consulta, recarga])
+    setAviso({ texto: lista.error, tono: 'error' })
+  }, [lista.error])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
     setAviso({ texto, tono })
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+    subirAlInicio()
   }
 
   function volverALista() {
@@ -120,13 +131,23 @@ export function Clientes() {
     setVista({ nombre: 'lista' })
   }
 
+  function volverAtras() {
+    if (vista.nombre === 'editar' || vista.nombre === 'abonar') {
+      setVista({ nombre: 'detalle', cliente: vista.cliente })
+      return
+    }
+    if (vista.nombre === 'confirmar' && vista.origen === 'detalle') {
+      setVista({ nombre: 'detalle', cliente: vista.cliente })
+      return
+    }
+    volverALista()
+  }
+
   async function abrirDetalle(cliente: Cliente) {
     setMenuId(null)
     setAviso(null)
     setVista({ nombre: 'detalle', cliente })
-    setCargandoDetalle(true)
     const resultado = await obtenerCliente(cliente.id)
-    setCargandoDetalle(false)
     if (!resultado.ok) {
       mostrar(resultado.mensaje, 'error')
       return
@@ -145,13 +166,13 @@ export function Clientes() {
     if (!resultado.ok) return resultado
 
     setVista({ nombre: 'lista' })
+    publicarLista([...listaLocal(), { ...resultado.datos, prendas: 0 }])
     mostrar(
       datos.abonoInicial == null
         ? 'Cliente agregado.'
         : 'Cliente agregado. El abono inicial quedó en su saldo a favor.',
       'ok',
     )
-    setRecarga((valor) => valor + 1)
     return resultado
   }
 
@@ -166,8 +187,8 @@ export function Clientes() {
     if (!resultado.ok) return resultado
 
     setVista({ nombre: 'detalle', cliente: resultado.datos })
+    anotarCliente(resultado.datos)
     mostrar('Cliente actualizado.', 'ok')
-    setRecarga((valor) => valor + 1)
     return resultado
   }
 
@@ -189,9 +210,7 @@ export function Clientes() {
       mostrar(resultado.mensaje, 'error')
       return
     }
-    setClientes((actual) =>
-      actual.map((item) => (item.id === resultado.datos.id ? resultado.datos : item)),
-    )
+    anotarCliente(resultado.datos)
     setVista((actual) => {
       if (
         (actual.nombre === 'detalle' || actual.nombre === 'editar' || actual.nombre === 'confirmar') &&
@@ -258,9 +277,7 @@ export function Clientes() {
     setOcupado(false)
     if (!resultado.ok) return resultado
 
-    setClientes((actual) =>
-      actual.map((item) => (item.id === resultado.datos.id ? resultado.datos : item)),
-    )
+    anotarCliente(resultado.datos)
     setVista({ nombre: 'lista' })
     const reactivo = estabaInactivo && resultado.datos.estado === 'activo'
     const excedente = canasta.ok ? excedenteAbono(totalCanasta(canasta.datos), saldoAntes, monto) : 0
@@ -289,22 +306,28 @@ export function Clientes() {
       return
     }
     setVista({ nombre: 'lista' })
+    publicarLista(listaLocal().filter((item) => item.id !== vista.cliente.id))
     mostrar(vista.motivo === 'bloquear' ? 'Cliente bloqueado.' : 'Cliente eliminado.', 'ok')
-    setRecarga((valor) => valor + 1)
   }
 
   function buscarAhora(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault()
-    setConsulta(busqueda.trim())
   }
 
   const sinResultados = !cargandoLista && clientes.length === 0 && aviso?.tono !== 'error'
 
   return (
-    <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
+    <Layout
+      titulo={nombre}
+      subtitulo={subtitulo}
+      acento={acento}
+      onAtras={vista.nombre !== 'lista' ? volverAtras : undefined}
+    >
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
 
+      <VistaAnimada vistaKey={vista.nombre === 'confirmar' ? 'detalle' : vista.nombre}>
       {vista.nombre === 'lista' ? (
+        <>
         <div className="flex flex-col gap-4 pb-24">
           <form onSubmit={buscarAhora} className="flex flex-col gap-2">
             <label className="text-sm" htmlFor={idBusqueda}>
@@ -373,7 +396,7 @@ export function Clientes() {
                   transition={{ duration: 0.15 }}
                   className="min-w-0 flex-1 touch-manipulation text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
                 >
-                  <span className="block break-words font-display text-4xl uppercase leading-none tracking-wide">
+                  <span className="block break-words font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
                     {cliente.codigo}
                   </span>
                   {cliente.nombre ? (
@@ -414,7 +437,7 @@ export function Clientes() {
                   </button>
                 </div>
                 </div>
-                {menuId === cliente.id ? (
+                <PanelDesplegable abierto={menuId === cliente.id}>
                   <div
                     id={`estado-${cliente.id}`}
                     role="group"
@@ -448,12 +471,30 @@ export function Clientes() {
                       Bloqueado
                     </button>
                   </div>
-                ) : null}
+                </PanelDesplegable>
               </li>
             ))}
           </ul>
           ) : null}
         </div>
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] lg:px-10">
+          <div className="mx-auto flex w-full max-w-lg justify-end lg:max-w-6xl">
+            <motion.button
+              type="button"
+              onClick={() => {
+                setAviso(null)
+                setVista({ nombre: 'crear' })
+              }}
+              whileTap={reducirMovimiento ? undefined : toque}
+              transition={{ duration: 0.15 }}
+              className="pointer-events-auto inline-flex min-h-12 touch-manipulation items-center gap-2 rounded-full bg-black px-5 text-base text-white shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              <Plus aria-hidden size={18} strokeWidth={2} />
+              Agregar cliente
+            </motion.button>
+          </div>
+        </div>
+        </>
       ) : null}
 
       {vista.nombre === 'crear' ? (
@@ -496,9 +537,7 @@ export function Clientes() {
           cliente={vista.cliente}
           acento={acento}
           ocupado={ocupado}
-          cargando={cargandoDetalle && vista.nombre === 'detalle'}
           confirmacion={vista.nombre === 'confirmar' ? vista : null}
-          onVolver={volverALista}
           onEditar={() => {
             if (vista.nombre !== 'detalle') return
             setAviso(null)
@@ -521,26 +560,7 @@ export function Clientes() {
           }}
         />
       ) : null}
-
-      {vista.nombre === 'lista' ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] lg:px-10">
-          <div className="mx-auto flex w-full max-w-lg justify-end lg:max-w-6xl">
-            <motion.button
-              type="button"
-              onClick={() => {
-                setAviso(null)
-                setVista({ nombre: 'crear' })
-              }}
-              whileTap={reducirMovimiento ? undefined : toque}
-              transition={{ duration: 0.15 }}
-              className="pointer-events-auto inline-flex min-h-12 touch-manipulation items-center gap-2 rounded-full bg-black px-5 text-base text-white shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-            >
-              <Plus aria-hidden size={18} strokeWidth={2} />
-              Agregar cliente
-            </motion.button>
-          </div>
-        </div>
-      ) : null}
+      </VistaAnimada>
     </Layout>
   )
 }
@@ -644,6 +664,8 @@ function FilasCliente({
   const menuPanelId = `estado-${cliente.id}`
   const refEstado = useRef<HTMLButtonElement>(null)
   const refMenu = useRef<HTMLDivElement>(null)
+  const reducirMovimiento = useReducedMotion()
+  const salto = reducirMovimiento === true
 
   useLayoutEffect(() => {
     if (!menuAbierto) return
@@ -762,11 +784,14 @@ function FilasCliente({
       </tr>
       {menuAbierto
         ? createPortal(
-            <div
+            <motion.div
               ref={refMenu}
               id={menuPanelId}
               role="group"
               aria-label={`Elige el estado de ${cliente.codigo}`}
+              initial={salto ? false : { opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={salto ? { duration: 0 } : transicionDesplegar}
               className="fixed z-30 flex w-40 flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
               style={{ top: 0, left: 0, visibility: 'hidden' }}
             >
@@ -796,7 +821,7 @@ function FilasCliente({
               >
                 Bloqueado
               </button>
-            </div>,
+            </motion.div>,
             document.body,
           )
         : null}

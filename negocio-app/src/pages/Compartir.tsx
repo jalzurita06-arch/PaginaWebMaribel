@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft } from 'lucide-react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
@@ -19,6 +18,7 @@ import {
   telefonoConPrefijo,
   textoWhatsApp,
 } from '../lib/compartir.ts'
+import { claveCanastaCliente, leerCache, pedirDatos } from '../lib/cacheLectura.ts'
 import { formatearDolares } from '../lib/dinero.ts'
 import { generarImagen, prepararArchivoCompartir } from '../lib/generarImagen.tsx'
 import type { ItemCanasta } from '../lib/reglas.ts'
@@ -36,14 +36,7 @@ type AvisoEstado = { texto: string; tono: 'ok' | 'error' }
 export function Compartir() {
   const { clienteId = '' } = useParams()
   const [parametros] = useSearchParams()
-  const ubicacion = useLocation()
-  const navigate = useNavigate()
   const textoVenta = parametros.get('venta')
-  const desdeConsulta = parametros.get('desde')
-  const desdeEstado =
-    ubicacion.state && typeof ubicacion.state === 'object' && 'desde' in ubicacion.state
-      ? (ubicacion.state as { desde?: unknown }).desde
-      : null
   const { acento } = secciones.canasta
   const reducirMovimiento = useReducedMotion()
   const [cliente, setCliente] = useState<Cliente | null>(null)
@@ -60,23 +53,24 @@ export function Compartir() {
 
   useEffect(() => {
     let vigente = true
+    const clave = claveCanastaCliente(clienteId)
+    const guardada = textoVenta == null ? leerCache<ItemCanasta[]>(clave) : null
+    if (guardada) setItems(guardada)
+    if (!guardada) setCargando(true)
+
     void (async () => {
-      setCargando(true)
-      const resultadoCliente = await obtenerCliente(clienteId)
-      if (!vigente) return
-
-      if (!resultadoCliente.ok) {
-        setCliente(null)
-        setItems([])
-        setError(resultadoCliente.mensaje)
-        setCargando(false)
-        return
-      }
-
-      setCliente(resultadoCliente.datos)
-
       if (textoVenta != null) {
+        const resultadoCliente = await obtenerCliente(clienteId)
+        if (!vigente) return
+        if (!resultadoCliente.ok) {
+          setCliente(null)
+          setItems([])
+          setError(resultadoCliente.mensaje)
+          setCargando(false)
+          return
+        }
         const venta = leerVenta(textoVenta)
+        setCliente(resultadoCliente.datos)
         if (!venta) {
           setItems([])
           setError('No se pudo leer esta venta.')
@@ -89,15 +83,27 @@ export function Compartir() {
         return
       }
 
-      const resultadoCanasta = await obtenerCanasta(clienteId)
+      const [resultadoCliente, resultadoCanasta] = await Promise.all([
+        obtenerCliente(clienteId),
+        pedirDatos(clave, () => obtenerCanasta(clienteId), { fresco: true }),
+      ])
       if (!vigente) return
-      if (!resultadoCanasta.ok) {
-        setItems([])
-        setError(resultadoCanasta.mensaje)
+      if (!resultadoCliente.ok) {
+        setCliente(null)
+        if (!guardada) setItems([])
+        setError(resultadoCliente.mensaje)
         setCargando(false)
         return
       }
-
+      setCliente(resultadoCliente.datos)
+      if (!resultadoCanasta.ok) {
+        if (!guardada) {
+          setItems([])
+          setError(resultadoCanasta.mensaje)
+        }
+        setCargando(false)
+        return
+      }
       setItems(resultadoCanasta.datos)
       setError(null)
       setCargando(false)
@@ -149,11 +155,6 @@ export function Compartir() {
     cliente && resumen && !error && !cargando && !imagenPreparada && !imagenFallida,
   )
   const listo = Boolean(cliente && resumen && !error && !cargando && telefono && bancoListo && !imagenFallida)
-  const vuelveAVenta = esVenta || desdeConsulta === 'venta' || desdeEstado === 'venta'
-
-  function regresar() {
-    navigate(vuelveAVenta ? '/venta' : '/canasta')
-  }
 
   async function compartir() {
     if (!cliente || ocupado) return
@@ -204,16 +205,6 @@ export function Compartir() {
 
   return (
     <Layout titulo="Compartir" subtitulo={esVenta ? 'Esta venta' : 'Canasta completa'} acento={acento}>
-      <motion.button
-        type="button"
-        onClick={regresar}
-        whileTap={reducirMovimiento ? undefined : toque}
-        transition={{ duration: 0.15 }}
-        className={`${boton} gap-2 bg-black/5 lg:w-auto lg:self-start lg:px-6`}
-      >
-        <ArrowLeft aria-hidden size={18} strokeWidth={2} />
-        Regresar
-      </motion.button>
       {error ? <Aviso>{error}</Aviso> : null}
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
       {cargando && !cliente ? <IndicadorCarga>Cargando cliente…</IndicadorCarga> : null}
@@ -226,7 +217,7 @@ export function Compartir() {
         <section className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:grid lg:grid-cols-2 lg:items-start lg:gap-8 lg:p-8">
           <div className="flex flex-col gap-5">
             <div>
-              <h2 className="break-words font-display text-5xl uppercase leading-none tracking-wide">
+              <h2 className="break-words font-display text-3xl uppercase leading-none tracking-wide lg:text-5xl">
                 {cliente.codigo}
               </h2>
               {cliente.nombre ? <p className="mt-2 break-words text-sm">{cliente.nombre}</p> : null}

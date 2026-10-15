@@ -94,7 +94,7 @@ export async function obtenerCanasta(clienteId: string): Promise<Resultado<FilaC
 
 /**
  * Copia las líneas a canasta_items.
- * No crea historial: la venta solo existe como prendas de la canasta.
+ * La fecha de cada venta queda en created_at; no hay historial aparte hasta el envío.
  */
 export async function agregarItemsCanasta(
   clienteId: string,

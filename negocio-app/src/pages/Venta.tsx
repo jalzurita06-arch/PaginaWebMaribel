@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Minus, Plus, Shirt, ShoppingBasket } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -8,8 +8,12 @@ import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
+import { CLAVE_CLIENTES, CLAVE_PRECIOS, claveCanastaCliente, guardarCache, leerCache, pedirDatos } from '../lib/cacheLectura.ts'
+import { coincideCliente } from '../lib/busqueda.ts'
 import { codificarVenta } from '../lib/compartir.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
+import { subirAlInicio } from '../lib/dispositivo.ts'
+import { useDatos } from '../lib/useDatos.ts'
 import { formatearDolares, redondear2 } from '../lib/dinero.ts'
 import { agruparPorPrecio, puedeVender, totalCanasta, type GrupoPrecio, type ItemCanasta } from '../lib/reglas.ts'
 import { borrarMenuVenta, guardarMenuVenta, leerMenuVenta } from '../lib/ventaConfirmada.ts'
@@ -21,7 +25,7 @@ import {
   obtenerCanasta,
   type FilaCanasta,
 } from '../services/canasta.ts'
-import { listarClientesVenta, obtenerCliente, type Cliente, type ClienteVenta } from '../services/clientes.ts'
+import { listarClientes, obtenerCliente, type Cliente, type ClienteVenta } from '../services/clientes.ts'
 import { listarPrecios, type Precio } from '../services/precios.ts'
 
 type Paso = 'buscar' | 'prendas' | 'resumen' | 'confirmado'
@@ -59,19 +63,23 @@ export function Venta() {
 
   const [paso, setPaso] = useState<Paso>('buscar')
   const [aviso, setAviso] = useState<AvisoEstado | null>(null)
-  const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null)
   const [bloqueo, setBloqueo] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
-  const [consulta, setConsulta] = useState('')
   const [recargaClientes, setRecargaClientes] = useState(0)
-  const [clientes, setClientes] = useState<ClienteVenta[]>([])
-  const [cargandoClientes, setCargandoClientes] = useState(true)
-  const [revisandoId, setRevisandoId] = useState<string | null>(null)
-  const [cliente, setCliente] = useState<Cliente | null>(null)
-  const [precios, setPrecios] = useState<Precio[]>([])
-  const [cargandoPrecios, setCargandoPrecios] = useState(true)
-  const [errorPrecios, setErrorPrecios] = useState<string | null>(null)
   const [recargaPrecios, setRecargaPrecios] = useState(0)
+  const listaClientes = useDatos(CLAVE_CLIENTES, () => listarClientes(), recargaClientes)
+  const listaPrecios = useDatos(CLAVE_PRECIOS, () => listarPrecios(), recargaPrecios)
+  const consulta = busqueda.trim()
+  const clientes = useMemo(
+    () => (listaClientes.datos ?? []).filter((fila) => coincideCliente(consulta, fila.codigo, fila.nombre)),
+    [consulta, listaClientes.datos],
+  )
+  const cargandoClientes = listaClientes.esperando && clientes.length === 0
+  const errorBusqueda = listaClientes.error
+  const precios = listaPrecios.datos ?? []
+  const cargandoPrecios = listaPrecios.esperando && precios.length === 0
+  const errorPrecios = listaPrecios.error
+  const [cliente, setCliente] = useState<Cliente | null>(null)
   const [precioElegido, setPrecioElegido] = useState<number | null>(null)
   const [textoCantidad, setTextoCantidad] = useState('')
   const [lineas, setLineas] = useState<LineaTemporal[]>([])
@@ -81,11 +89,6 @@ export function Venta() {
   const [errorCanasta, setErrorCanasta] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [restaurando, setRestaurando] = useState(() => leerMenuVenta() != null)
-
-  useEffect(() => {
-    const tiempo = window.setTimeout(() => setConsulta(busqueda.trim()), 250)
-    return () => window.clearTimeout(tiempo)
-  }, [busqueda])
 
   useEffect(() => {
     const guardada = leerMenuVenta()
@@ -112,79 +115,40 @@ export function Venta() {
     }
   }, [])
 
-  useEffect(() => {
-    let vigente = true
-    void (async () => {
-      setCargandoClientes(true)
-      setErrorBusqueda(null)
-      const resultado = await listarClientesVenta(consulta)
-      if (!vigente) return
-      setCargandoClientes(false)
-      if (!resultado.ok) {
-        setErrorBusqueda(resultado.mensaje)
-        return
-      }
-      setClientes(resultado.datos)
-      setErrorBusqueda(null)
-    })()
-    return () => {
-      vigente = false
-    }
-  }, [consulta, recargaClientes])
-
-  useEffect(() => {
-    let vigente = true
-    void (async () => {
-      setCargandoPrecios(true)
-      setErrorPrecios(null)
-      const resultado = await listarPrecios()
-      if (!vigente) return
-      setCargandoPrecios(false)
-      if (!resultado.ok) {
-        setErrorPrecios(resultado.mensaje)
-        setPrecios([])
-        return
-      }
-      setPrecios(resultado.datos)
-    })()
-    return () => {
-      vigente = false
-    }
-  }, [recargaPrecios])
-
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
     setAviso({ texto, tono })
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+    subirAlInicio()
   }
 
-  async function elegirCliente(opcion: Cliente) {
+  function elegirCliente(opcion: Cliente) {
     if (eligiendo.current) return
+    if (!puedeVender(opcion.estado)) {
+      setBloqueo(MENSAJE_CLIENTE_INACTIVO)
+      subirAlInicio()
+      return
+    }
+
     eligiendo.current = true
     setAviso(null)
     setBloqueo(null)
-    setRevisandoId(opcion.id)
-    const resultado = await obtenerCliente(opcion.id)
-    eligiendo.current = false
-    setRevisandoId(null)
-    if (!resultado.ok) {
-      mostrar(resultado.mensaje, 'error')
-      return
-    }
-    if (!puedeVender(resultado.datos.estado)) {
-      setBloqueo(MENSAJE_CLIENTE_INACTIVO)
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
-      return
-    }
-    if (cliente && cliente.id !== resultado.datos.id) {
+    if (cliente && cliente.id !== opcion.id) {
       setLineas([])
       setPrecioElegido(null)
       setTextoCantidad('')
     }
-    setCliente(resultado.datos)
-    setAviso(null)
+    setCliente(opcion)
     setPaso('prendas')
+    eligiendo.current = false
+
+    void obtenerCliente(opcion.id).then((resultado) => {
+      if (!resultado.ok) return
+      setCliente((actual) => (actual?.id === opcion.id ? resultado.datos : actual))
+      if (!puedeVender(resultado.datos.estado)) {
+        setPaso('buscar')
+        setBloqueo(MENSAJE_CLIENTE_INACTIVO)
+        subirAlInicio()
+      }
+    })
   }
 
   function agregarLinea(evento: FormEvent<HTMLFormElement>) {
@@ -224,16 +188,26 @@ export function Venta() {
 
   async function cargarCanasta(clienteId: string) {
     const id = ++pedidoCanasta.current
-    setCargandoCanasta(true)
+    const clave = claveCanastaCliente(clienteId)
+    const guardada = leerCache<FilaCanasta[]>(clave)
+    if (guardada) {
+      setCanasta(guardada)
+      setCargandoCanasta(false)
+    } else {
+      setCargandoCanasta(true)
+    }
     setErrorCanasta(null)
-    const resultado = await obtenerCanasta(clienteId)
+    const resultado = await pedirDatos(clave, () => obtenerCanasta(clienteId), { fresco: true })
     if (pedidoCanasta.current !== id) return
     setCargandoCanasta(false)
     if (!resultado.ok) {
-      setCanasta(null)
-      setErrorCanasta(resultado.mensaje)
+      if (!guardada) {
+        setCanasta(null)
+        setErrorCanasta(resultado.mensaje)
+      }
       return
     }
+    guardarCache(clave, resultado.datos)
     setCanasta(resultado.datos)
   }
 
@@ -322,7 +296,7 @@ export function Venta() {
               ref={refPaso}
               tabIndex={-1}
               role={paso === 'confirmado' ? 'status' : undefined}
-              className={`mt-1 font-display text-4xl uppercase tracking-wide outline-none ${paso === 'confirmado' ? 'rounded-3xl bg-afirmar px-5 py-4 leading-tight' : 'leading-none'}`}
+              className={`mt-1 font-display text-2xl uppercase tracking-wide outline-none lg:text-4xl ${paso === 'confirmado' ? 'rounded-3xl bg-afirmar px-5 py-4 leading-tight' : 'leading-none'}`}
             >
               {titulos[paso]}
             </h2>
@@ -335,12 +309,12 @@ export function Venta() {
               clientes={clientes}
               cargando={cargandoClientes}
               error={errorBusqueda}
-              revisandoId={revisandoId}
+              revisandoId={null}
               onBusqueda={(valor) => {
                 setBusqueda(valor)
                 setBloqueo(null)
               }}
-              onBuscarYa={() => setConsulta(busqueda.trim())}
+              onBuscarYa={() => {}}
               onElegir={(opcion) => void elegirCliente(opcion)}
               onReintentar={() => setRecargaClientes((valor) => valor + 1)}
             />
@@ -489,7 +463,7 @@ function PasoBuscar({
             >
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline gap-3">
-                  <span className="shrink-0 font-display text-4xl uppercase leading-none tracking-wide">
+                  <span className="shrink-0 font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
                     {cliente.codigo}
                   </span>
                   <span className="min-w-0 truncate text-sm">
@@ -563,7 +537,7 @@ function PasoPrendas({
 
   useEffect(() => {
     if (precioElegido == null) return
-    const esCelular = window.matchMedia('(max-width: 1023px)').matches
+    const esCelular = window.matchMedia('(max-width: 979px)').matches
     if (esCelular) {
       refFormulario.current?.scrollIntoView({
         behavior: reducirMovimiento ? 'auto' : 'smooth',
@@ -636,7 +610,7 @@ function PasoPrendas({
                 onClick={() => onElegirPrecio(precio.valor)}
                 whileTap={reducirMovimiento ? undefined : toque}
                 transition={{ duration: 0.15 }}
-                className="flex min-h-20 touch-manipulation items-center justify-center rounded-full px-3 font-display text-3xl leading-none tracking-wide [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black lg:min-h-24 lg:text-4xl"
+                className="flex min-h-14 touch-manipulation items-center justify-center rounded-full px-3 font-display text-2xl leading-none tracking-wide [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black lg:min-h-24 lg:text-4xl"
                 style={{ backgroundColor: elegido ? '#000' : acento, color: elegido ? '#fff' : '#000' }}
               >
                 {monto}
@@ -884,7 +858,7 @@ function PasoConfirmado({
 function FichaCliente({ cliente }: { cliente: Cliente }) {
   return (
     <p className="rounded-3xl bg-white px-5 py-4 shadow-sm">
-      <span className="block font-display text-4xl uppercase leading-none tracking-wide">{cliente.codigo}</span>
+      <span className="block font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">{cliente.codigo}</span>
       {cliente.nombre ? <span className="mt-2 block break-words text-sm">{cliente.nombre}</span> : null}
     </p>
   )

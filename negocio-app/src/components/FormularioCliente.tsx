@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft } from 'lucide-react'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { Aviso } from './Aviso.tsx'
@@ -31,7 +30,7 @@ export function FormularioCliente({
   cliente,
   guardando,
   acento,
-  onCancelar,
+  onCancelar: _onCancelar,
   onCrear,
   onEditar,
 }: Props) {
@@ -117,18 +116,8 @@ export function FormularioCliente({
 
   return (
     <form className="flex flex-col gap-5" noValidate onSubmit={enviar}>
-      <button
-        type="button"
-        onClick={onCancelar}
-        disabled={guardando}
-        className="inline-flex min-h-11 w-fit touch-manipulation items-center gap-2 rounded-full bg-black/5 px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-      >
-        <ArrowLeft aria-hidden size={18} strokeWidth={2} />
-        Lista
-      </button>
-
       <div className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:p-8">
-        <h2 className="font-display text-4xl uppercase leading-none tracking-wide">
+        <h2 className="font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
           {esNuevo ? 'Nuevo cliente' : 'Editar cliente'}
         </h2>
 

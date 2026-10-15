@@ -1,14 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { formatearDolares, redondear2 } from '../lib/dinero.ts'
 import {
+  agruparPorDia,
   agruparPorPrecio,
   calcularEnvio,
+  fechaDiaLocal,
   ordenarPorCanasta,
   saldoPendiente,
   totalCanasta,
   totalPrendas,
+  type GrupoDia,
   type GrupoPrecio,
   type ItemCanasta,
+  type ItemCanastaDia,
 } from '../lib/reglas.ts'
 import { supabase } from '../lib/supabase.ts'
 import type { EstadoCliente, Resultado } from './clientes.ts'
@@ -38,6 +42,7 @@ export type CanastaAbierta = {
   total: number
   saldo: number
   grupos: GrupoPrecio[]
+  dias: GrupoDia[]
 }
 
 export type EnvioSemana = {
@@ -48,6 +53,7 @@ export type EnvioSemana = {
   prendas: number
   total: number
   detalle: GrupoPrecio[]
+  dias: GrupoDia[]
 }
 
 export type EnvioRegistrado = {
@@ -66,9 +72,16 @@ type FilaAgrupable = {
   saldoFavor: number
   precio: number
   cantidad: number
+  fecha: string
 }
 
-type ItemGuardado = { id: string; precio: number; cantidad: number }
+type ItemGuardado = {
+  id: string
+  precio: number
+  cantidad: number
+  createdAt: string | null
+  fecha: string
+}
 
 type ClienteEnvio = {
   id: string
@@ -130,7 +143,7 @@ export function mensajeEnvioConfirmado(nuevoSaldoFavor: number): string {
 
 /** Calcula saldo, estado y detalle. No toca la base. */
 export function armarRegistroEnvio(
-  items: ItemCanasta[],
+  items: (ItemCanasta & { fecha?: string })[],
   saldoFavor: number,
 ): Resultado<{
   nuevoSaldoFavor: number
@@ -138,15 +151,24 @@ export function armarRegistroEnvio(
   total: number
   prendas: number
   detalle: GrupoPrecio[]
+  dias: GrupoDia[]
 }> {
   const utiles = items.filter((item) => item.cantidad > 0)
   if (utiles.length === 0) return { ok: false, mensaje: MENSAJE_CANASTA_VACIA }
 
-  const detalle = agruparPorPrecio(utiles)
-  const prendas = totalPrendas(detalle)
+  const grupos = agruparPorPrecio(utiles)
+  const prendas = totalPrendas(grupos)
   if (prendas <= 0) return { ok: false, mensaje: MENSAJE_CANASTA_VACIA }
 
-  const total = totalCanasta(detalle)
+  const dias = agruparPorDia(
+    utiles.map((item) => ({
+      precio: item.precio,
+      cantidad: item.cantidad,
+      fecha: item.fecha ?? '',
+    })),
+  )
+  const detalle = detalleConFecha(dias, grupos)
+  const total = totalCanasta(grupos)
   const calculo = calcularEnvio(total, saldoFavor)
   return {
     ok: true,
@@ -156,6 +178,7 @@ export function armarRegistroEnvio(
       total,
       prendas,
       detalle,
+      dias,
     },
   }
 }
@@ -163,7 +186,7 @@ export function armarRegistroEnvio(
 export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[] {
   const porCliente = new Map<
     string,
-    { codigo: string; nombre: string | null; telefono: string; saldoFavor: number; items: ItemCanasta[] }
+    { codigo: string; nombre: string | null; telefono: string; saldoFavor: number; items: ItemCanastaDia[] }
   >()
 
   for (const fila of filas) {
@@ -175,7 +198,7 @@ export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[
       saldoFavor: fila.saldoFavor,
       items: [],
     }
-    actual.items.push({ precio: fila.precio, cantidad: fila.cantidad })
+    actual.items.push({ precio: fila.precio, cantidad: fila.cantidad, fecha: fila.fecha })
     porCliente.set(fila.clienteId, actual)
   }
 
@@ -183,6 +206,7 @@ export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[
     [...porCliente.entries()]
       .map(([clienteId, datos]) => {
         const grupos = agruparPorPrecio(datos.items)
+        const dias = agruparPorDia(datos.items)
         const total = totalCanasta(grupos)
         return {
           clienteId,
@@ -194,6 +218,7 @@ export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[
           total,
           saldo: saldoPendiente(total, datos.saldoFavor),
           grupos,
+          dias,
         }
       })
       .filter((canasta) => canasta.prendas > 0),
@@ -207,7 +232,7 @@ export async function listarCanastasAbiertas(): Promise<Resultado<CanastaAbierta
   try {
     const { data, error } = await db
       .from('canasta_items')
-      .select('precio, cantidad, clientes(id, codigo, nombre, telefono, saldo_favor)')
+      .select('precio, cantidad, created_at, clientes(id, codigo, nombre, telefono, saldo_favor)')
 
     if (error) return { ok: false, mensaje: mensajeErrorEnvio(error, 'cargar las canastas') }
     const filas = leerFilasCanasta(data)
@@ -312,6 +337,7 @@ export async function registrarEnvio(
       prendas: registro.datos.prendas,
       total: registro.datos.total,
       detalle: registro.datos.detalle,
+      dias: registro.datos.dias,
     }
 
     return {
@@ -373,7 +399,7 @@ async function leerClienteYCanasta(
 ): Promise<Resultado<ClienteEnvio>> {
   const { data, error } = await db
     .from('clientes')
-    .select('id, codigo, estado, saldo_favor, canasta_items(id, precio, cantidad)')
+    .select('id, codigo, estado, saldo_favor, canasta_items(id, precio, cantidad, created_at)')
     .eq('id', clienteId)
     .maybeSingle()
 
@@ -425,6 +451,7 @@ async function restaurarCanasta(
       cliente_id: clienteId,
       precio: item.precio,
       cantidad: item.cantidad,
+      ...(item.createdAt ? { created_at: item.createdAt } : {}),
     })),
   )
   return !error
@@ -467,6 +494,7 @@ function leerFilasCanasta(data: unknown): FilaAgrupable[] | null {
       saldoFavor: cliente.saldoFavor,
       precio: redondear2(precio),
       cantidad,
+      fecha: fechaDeItem(fila.created_at),
     })
   }
 
@@ -528,7 +556,14 @@ function leerItems(data: unknown): ItemGuardado[] | null {
     const precio = Number(fila.precio)
     const cantidad = Number(fila.cantidad)
     if (typeof fila.id !== 'string' || !Number.isFinite(precio) || !Number.isFinite(cantidad)) return null
-    items.push({ id: fila.id, precio: redondear2(precio), cantidad })
+    const createdAt = typeof fila.created_at === 'string' && fila.created_at ? fila.created_at : null
+    items.push({
+      id: fila.id,
+      precio: redondear2(precio),
+      cantidad,
+      createdAt,
+      fecha: fechaDeItem(createdAt),
+    })
   }
   return items
 }
@@ -556,6 +591,7 @@ function leerEnvio(valor: unknown): EnvioSemana | null {
   const prendas = Number(fila.total_prendas)
   if (!Number.isFinite(total) || !Number.isFinite(prendas)) return null
 
+  const detalle = leerDetalleEnvio(fila.detalle)
   return {
     id: fila.id,
     fecha,
@@ -563,7 +599,8 @@ function leerEnvio(valor: unknown): EnvioSemana | null {
     tipo: fila.tipo_envio,
     prendas,
     total: redondear2(Math.max(0, total)),
-    detalle: leerDetalleEnvio(fila.detalle),
+    detalle,
+    dias: agruparPorDia(itemsDetalleConFecha(fila.detalle)),
   }
 }
 
@@ -585,6 +622,35 @@ export function leerDetalleEnvio(valor: unknown): GrupoPrecio[] {
     })
   }
   return grupos
+}
+
+function detalleConFecha(dias: GrupoDia[], grupos: GrupoPrecio[]): GrupoPrecio[] {
+  if (!dias.some((dia) => dia.fecha)) return grupos
+  return dias.flatMap((dia) =>
+    dia.grupos.map((grupo) => ({
+      ...grupo,
+      fecha: dia.fecha,
+    })),
+  )
+}
+
+function itemsDetalleConFecha(valor: unknown): ItemCanastaDia[] {
+  if (!Array.isArray(valor)) return []
+  const items: ItemCanastaDia[] = []
+  for (const fila of valor) {
+    if (typeof fila !== 'object' || fila === null) continue
+    const datos = fila as Record<string, unknown>
+    const precio = Number(datos.precio)
+    const cantidad = Number(datos.cantidad)
+    if (!Number.isFinite(precio) || !Number.isFinite(cantidad) || cantidad <= 0) continue
+    const fecha = typeof datos.fecha === 'string' ? fechaDiaLocal(datos.fecha) : ''
+    items.push({ precio: redondear2(precio), cantidad, fecha })
+  }
+  return items
+}
+
+function fechaDeItem(valor: unknown): string {
+  return typeof valor === 'string' ? fechaDiaLocal(valor) : ''
 }
 
 function leerFecha(valor: unknown): string | null {

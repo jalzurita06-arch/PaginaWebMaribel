@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { abonoAtrasado, fechaCorteAbono, ultimasFechasAbono } from './abonoAtrasado.ts'
+import { abonoAtrasado, fechaCorteAbono, organizarAbonosPorCliente, ultimasFechasAbono } from './abonoAtrasado.ts'
 
 const hoy = new Date(2026, 9, 15)
 
@@ -31,5 +31,23 @@ describe('abono atrasado', () => {
         { clienteId: 'b', fecha: '2026-09-01' },
       ]),
     ).toEqual({ a: '2026-10-12', b: '2026-09-01' })
+  })
+})
+
+describe('organizarAbonosPorCliente', () => {
+  it('agrupa por clienta y deja el abono más reciente primero', () => {
+    expect(
+      organizarAbonosPorCliente([
+        { clienteId: 'b', fecha: '2026-10-01', monto: 5 },
+        { clienteId: 'a', fecha: '2026-10-01', monto: 10 },
+        { clienteId: 'a', fecha: '2026-10-12', monto: 15 },
+      ]),
+    ).toEqual({
+      b: [{ clienteId: 'b', fecha: '2026-10-01', monto: 5 }],
+      a: [
+        { clienteId: 'a', fecha: '2026-10-12', monto: 15 },
+        { clienteId: 'a', fecha: '2026-10-01', monto: 10 },
+      ],
+    })
   })
 })

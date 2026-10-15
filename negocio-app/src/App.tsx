@@ -1,12 +1,17 @@
 import { useEffect } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { CargandoSesion } from './components/CargandoSesion.tsx'
 import { FranjaConexion } from './components/FranjaConexion.tsx'
 import { RutaProtegida } from './components/RutaProtegida.tsx'
 import { ProveedorConexion } from './context/ProveedorConexion.tsx'
+import { ProveedorMovimiento } from './context/ProveedorMovimiento.tsx'
 import { ProveedorSesion } from './context/ProveedorSesion.tsx'
+import { ProveedorTransicion } from './context/ProveedorTransicion.tsx'
+import { useConexion } from './context/useConexion.ts'
 import { useSesion } from './context/useSesion.ts'
+import { leerSenalesRed, redEsLenta } from './lib/dispositivo.ts'
+import { precargarDatos } from './lib/precarga.ts'
 import { olvidarMenuVentaSiSalio } from './lib/ventaConfirmada.ts'
 import { Abonos } from './pages/Abonos.tsx'
 import { Canasta } from './pages/Canasta.tsx'
@@ -31,41 +36,68 @@ function Rutas() {
   if (cargando) return <CargandoSesion />
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={ubicacion.pathname}
-        initial={reducirMovimiento ? false : { opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={reducirMovimiento ? { opacity: 0 } : { opacity: 0, y: -12 }}
-        transition={reducirMovimiento ? { duration: 0 } : transicionPagina}
-        className="min-h-dvh w-full"
-      >
-        <Routes location={ubicacion}>
-          <Route path="/login" element={<Login />} />
-          <Route element={<RutaProtegida />}>
-            <Route path="/" element={<Inicio />} />
-            <Route path="/venta" element={<Venta />} />
-            <Route path="/compartir/:clienteId" element={<Compartir />} />
-            <Route path="/canasta" element={<Canasta />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/catalogo" element={<Catalogo />} />
-            <Route path="/abonos" element={<Abonos />} />
-          </Route>
-        </Routes>
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key={ubicacion.pathname}
+      initial={reducirMovimiento ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={reducirMovimiento ? { duration: 0 } : transicionPagina}
+      className="min-h-dvh w-full"
+    >
+      <Routes location={ubicacion}>
+        <Route path="/login" element={<Login />} />
+        <Route element={<RutaProtegida />}>
+          <Route path="/" element={<Inicio />} />
+          <Route path="/venta" element={<Venta />} />
+          <Route path="/compartir/:clienteId" element={<Compartir />} />
+          <Route path="/canasta" element={<Canasta />} />
+          <Route path="/clientes" element={<Clientes />} />
+          <Route path="/catalogo" element={<Catalogo />} />
+          <Route path="/abonos" element={<Abonos />} />
+        </Route>
+      </Routes>
+    </motion.div>
   )
+}
+
+function PrecargaDatos() {
+  const { sesion, cargando } = useSesion()
+  const { enLinea } = useConexion()
+
+  useEffect(() => {
+    if (cargando || !sesion || !enLinea) return
+
+    const arrancar = () => precargarDatos(redEsLenta(leerSenalesRed()))
+    const ventana = window as Window & {
+      requestIdleCallback?: (callback: () => void, opciones?: { timeout: number }) => number
+      cancelIdleCallback?: (id: number) => void
+    }
+
+    if (ventana.requestIdleCallback) {
+      const id = ventana.requestIdleCallback(arrancar, { timeout: 1200 })
+      return () => ventana.cancelIdleCallback?.(id)
+    }
+
+    const id = window.setTimeout(arrancar, 200)
+    return () => window.clearTimeout(id)
+  }, [cargando, enLinea, sesion])
+
+  return null
 }
 
 export default function App() {
   return (
-    <ProveedorConexion>
-      <ProveedorSesion>
-        <BrowserRouter>
-          <FranjaConexion />
-          <Rutas />
-        </BrowserRouter>
-      </ProveedorSesion>
-    </ProveedorConexion>
+    <ProveedorMovimiento>
+      <ProveedorConexion>
+        <ProveedorSesion>
+          <BrowserRouter>
+            <ProveedorTransicion>
+              <FranjaConexion />
+              <PrecargaDatos />
+              <Rutas />
+            </ProveedorTransicion>
+          </BrowserRouter>
+        </ProveedorSesion>
+      </ProveedorConexion>
+    </ProveedorMovimiento>
   )
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agruparPorDia,
   agruparPorPrecio,
   calcularEnvio,
   excedenteAbono,
+  fechaDiaLocal,
   mensajeAbonoRegistrado,
   ordenarPorCanasta,
   saldoPendiente,
@@ -69,6 +71,71 @@ describe('reglas de la canasta', () => {
     ).toEqual([
       { precio: 5, cantidad: 3, subtotal: 15 },
       { precio: 9, cantidad: 2, subtotal: 18 },
+    ])
+  })
+})
+
+describe('fechaDiaLocal', () => {
+  it('deja una fecha YYYY-MM-DD igual', () => {
+    expect(fechaDiaLocal('2026-10-15')).toBe('2026-10-15')
+  })
+
+  it('pasa el instante a la fecha de Ecuador', () => {
+    expect(fechaDiaLocal('2026-10-15T05:24:28.553Z')).toBe('2026-10-15')
+    expect(fechaDiaLocal('2026-10-15T04:17:22.099Z')).toBe('2026-10-14')
+    expect(fechaDiaLocal('2026-10-15 04:17:22.099128+00')).toBe('2026-10-14')
+  })
+})
+
+describe('agruparPorDia', () => {
+  it('junta el mismo precio del mismo día y deja el día más reciente primero', () => {
+    expect(
+      agruparPorDia([
+        { precio: 5, cantidad: 1, fecha: '2026-10-14' },
+        { precio: 9, cantidad: 2, fecha: '2026-10-15' },
+        { precio: 5, cantidad: 2, fecha: '2026-10-15' },
+        { precio: 5, cantidad: 1, fecha: '2026-10-14' },
+      ]),
+    ).toEqual([
+      {
+        fecha: '2026-10-15',
+        prendas: 4,
+        total: 28,
+        grupos: [
+          { precio: 9, cantidad: 2, subtotal: 18 },
+          { precio: 5, cantidad: 2, subtotal: 10 },
+        ],
+      },
+      {
+        fecha: '2026-10-14',
+        prendas: 2,
+        total: 10,
+        grupos: [{ precio: 5, cantidad: 2, subtotal: 10 }],
+      },
+    ])
+  })
+
+  it('deja al final las prendas sin fecha válida', () => {
+    expect(
+      agruparPorDia([
+        { precio: 5, cantidad: 1, fecha: '' },
+        { precio: 5, cantidad: 1, fecha: 'no' },
+        { precio: 8, cantidad: 1, fecha: '2026-10-15' },
+        { precio: 5, cantidad: 0, fecha: '2026-10-15' },
+      ]),
+    ).toEqual([
+      {
+        fecha: '2026-10-15',
+        prendas: 1,
+        total: 8,
+        grupos: [{ precio: 8, cantidad: 1, subtotal: 8 }],
+      },
+      {
+        fecha: '',
+        prendas: 2,
+        total: 10,
+        grupos: [{ precio: 5, cantidad: 2, subtotal: 10 }],
+      },
     ])
   })
 })

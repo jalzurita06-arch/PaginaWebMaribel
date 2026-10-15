@@ -24,3 +24,19 @@ export function ultimasFechasAbono(filas: { clienteId: string; fecha: string }[]
   }
   return fechas
 }
+
+/** Junta los abonos de cada clienta, el más reciente primero. */
+export function organizarAbonosPorCliente<T extends { clienteId: string; fecha: string }>(
+  filas: T[],
+): Record<string, T[]> {
+  const porCliente: Record<string, T[]> = {}
+  for (const fila of filas) {
+    const lista = porCliente[fila.clienteId] ?? []
+    lista.push(fila)
+    porCliente[fila.clienteId] = lista
+  }
+  for (const lista of Object.values(porCliente)) {
+    lista.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0))
+  }
+  return porCliente
+}

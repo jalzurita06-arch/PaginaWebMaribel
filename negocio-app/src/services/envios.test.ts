@@ -43,6 +43,14 @@ describe('armarRegistroEnvio', () => {
         total: 20,
         prendas: 4,
         detalle: [{ precio: 5, cantidad: 4, subtotal: 20 }],
+        dias: [
+          {
+            fecha: '',
+            prendas: 4,
+            total: 20,
+            grupos: [{ precio: 5, cantidad: 4, subtotal: 20 }],
+          },
+        ],
       },
     })
   })
@@ -68,6 +76,55 @@ describe('armarRegistroEnvio', () => {
           { precio: 5, cantidad: 3, subtotal: 15 },
           { precio: 9, cantidad: 2, subtotal: 18 },
         ],
+        dias: [
+          {
+            fecha: '',
+            prendas: 5,
+            total: 33,
+            grupos: [
+              { precio: 5, cantidad: 3, subtotal: 15 },
+              { precio: 9, cantidad: 2, subtotal: 18 },
+            ],
+          },
+        ],
+      },
+    })
+  })
+
+  it('guarda el detalle por día de compra cuando las prendas tienen fecha', () => {
+    expect(
+      armarRegistroEnvio(
+        [
+          { precio: 5, cantidad: 2, fecha: '2026-10-14' },
+          { precio: 5, cantidad: 1, fecha: '2026-10-15' },
+        ],
+        0,
+      ),
+    ).toEqual({
+      ok: true,
+      datos: {
+        nuevoSaldoFavor: 0,
+        nuevoEstado: 'inactivo',
+        total: 15,
+        prendas: 3,
+        detalle: [
+          { precio: 5, cantidad: 1, subtotal: 5, fecha: '2026-10-15' },
+          { precio: 5, cantidad: 2, subtotal: 10, fecha: '2026-10-14' },
+        ],
+        dias: [
+          {
+            fecha: '2026-10-15',
+            prendas: 1,
+            total: 5,
+            grupos: [{ precio: 5, cantidad: 1, subtotal: 5 }],
+          },
+          {
+            fecha: '2026-10-14',
+            prendas: 2,
+            total: 10,
+            grupos: [{ precio: 5, cantidad: 2, subtotal: 10 }],
+          },
+        ],
       },
     })
   })
@@ -77,10 +134,46 @@ describe('agruparCanastasAbiertas', () => {
   it('junta las prendas de cada clienta, calcula saldo y ordena por más prendas', () => {
     expect(
       agruparCanastasAbiertas([
-        { clienteId: '2', codigo: 'Z', nombre: 'Zulema', telefono: '0991111111', saldoFavor: 5, precio: 9, cantidad: 1 },
-        { clienteId: '1', codigo: 'A', nombre: 'Ana', telefono: '0992222222', saldoFavor: 10, precio: 5, cantidad: 2 },
-        { clienteId: '1', codigo: 'A', nombre: 'Ana', telefono: '0992222222', saldoFavor: 10, precio: 5, cantidad: 1 },
-        { clienteId: '3', codigo: 'B', nombre: null, telefono: '0993333333', saldoFavor: 0, precio: 4, cantidad: 0 },
+        {
+          clienteId: '2',
+          codigo: 'Z',
+          nombre: 'Zulema',
+          telefono: '0991111111',
+          saldoFavor: 5,
+          precio: 9,
+          cantidad: 1,
+          fecha: '2026-10-15',
+        },
+        {
+          clienteId: '1',
+          codigo: 'A',
+          nombre: 'Ana',
+          telefono: '0992222222',
+          saldoFavor: 10,
+          precio: 5,
+          cantidad: 2,
+          fecha: '2026-10-15',
+        },
+        {
+          clienteId: '1',
+          codigo: 'A',
+          nombre: 'Ana',
+          telefono: '0992222222',
+          saldoFavor: 10,
+          precio: 5,
+          cantidad: 1,
+          fecha: '2026-10-14',
+        },
+        {
+          clienteId: '3',
+          codigo: 'B',
+          nombre: null,
+          telefono: '0993333333',
+          saldoFavor: 0,
+          precio: 4,
+          cantidad: 0,
+          fecha: '2026-10-15',
+        },
       ]),
     ).toEqual([
       {
@@ -93,6 +186,20 @@ describe('agruparCanastasAbiertas', () => {
         total: 15,
         saldo: 5,
         grupos: [{ precio: 5, cantidad: 3, subtotal: 15 }],
+        dias: [
+          {
+            fecha: '2026-10-15',
+            prendas: 2,
+            total: 10,
+            grupos: [{ precio: 5, cantidad: 2, subtotal: 10 }],
+          },
+          {
+            fecha: '2026-10-14',
+            prendas: 1,
+            total: 5,
+            grupos: [{ precio: 5, cantidad: 1, subtotal: 5 }],
+          },
+        ],
       },
       {
         clienteId: '2',
@@ -104,14 +211,40 @@ describe('agruparCanastasAbiertas', () => {
         total: 9,
         saldo: 4,
         grupos: [{ precio: 9, cantidad: 1, subtotal: 9 }],
+        dias: [
+          {
+            fecha: '2026-10-15',
+            prendas: 1,
+            total: 9,
+            grupos: [{ precio: 9, cantidad: 1, subtotal: 9 }],
+          },
+        ],
       },
     ])
   })
 
   it('deja primero la canasta con más prendas aunque el código vaya después', () => {
     const agrupadas = agruparCanastasAbiertas([
-      { clienteId: '1', codigo: 'A', nombre: null, telefono: '0991111111', saldoFavor: 0, precio: 5, cantidad: 1 },
-      { clienteId: '2', codigo: 'Z', nombre: null, telefono: '0992222222', saldoFavor: 0, precio: 5, cantidad: 4 },
+      {
+        clienteId: '1',
+        codigo: 'A',
+        nombre: null,
+        telefono: '0991111111',
+        saldoFavor: 0,
+        precio: 5,
+        cantidad: 1,
+        fecha: '2026-10-15',
+      },
+      {
+        clienteId: '2',
+        codigo: 'Z',
+        nombre: null,
+        telefono: '0992222222',
+        saldoFavor: 0,
+        precio: 5,
+        cantidad: 4,
+        fecha: '2026-10-15',
+      },
     ])
     expect(agrupadas.map((canasta) => canasta.codigo)).toEqual(['Z', 'A'])
   })

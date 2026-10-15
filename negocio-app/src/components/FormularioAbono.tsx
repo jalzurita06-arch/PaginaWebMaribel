@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft } from 'lucide-react'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { redondear2 } from '../lib/dinero.ts'
 import { validarAbono, type ErroresAbono } from '../lib/clienteFormulario.ts'
@@ -24,9 +23,9 @@ export function FormularioAbono({
   cliente,
   acento,
   guardando,
-  textoCancelar = 'Lista',
+  textoCancelar: _textoCancelar = 'Lista',
   inicial,
-  onCancelar,
+  onCancelar: _onCancelar,
   onGuardar,
 }: Props) {
   const { enLinea } = useConexion()
@@ -70,18 +69,8 @@ export function FormularioAbono({
 
   return (
     <form className="flex flex-col gap-5" noValidate onSubmit={enviar}>
-      <button
-        type="button"
-        onClick={onCancelar}
-        disabled={guardando}
-        className="inline-flex min-h-11 w-fit touch-manipulation items-center gap-2 rounded-full bg-black/5 px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-      >
-        <ArrowLeft aria-hidden size={18} strokeWidth={2} />
-        {textoCancelar}
-      </button>
-
       <div className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:max-w-3xl lg:p-8">
-        <h2 className="break-words font-display text-4xl uppercase leading-none tracking-wide">
+        <h2 className="break-words font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
           {editando ? 'Editar abono' : `Abono de ${cliente.codigo}`}
         </h2>
 

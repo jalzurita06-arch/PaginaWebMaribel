@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { ultimasFechasAbono } from '../lib/abonoAtrasado.ts'
+import { organizarAbonosPorCliente, ultimasFechasAbono } from '../lib/abonoAtrasado.ts'
 import { capitalizarNombre, type DatosNuevoCliente } from '../lib/clienteFormulario.ts'
 import { redondear2 } from '../lib/dinero.ts'
 import {
@@ -387,6 +387,54 @@ export async function listarAbonos(clienteId: string): Promise<Resultado<Abono[]
   }
 }
 
+/** Abonos de varias clientas, el más reciente primero. Quien no aparece no tiene abonos. */
+export async function listarAbonosDeClientes(
+  clienteIds: string[],
+): Promise<Resultado<Record<string, Abono[]>>> {
+  if (clienteIds.length === 0) return { ok: true, datos: {} }
+
+  const db = preparar()
+  if (esFallo(db)) return db
+
+  try {
+    const { data, error } = await db
+      .from('abonos')
+      .select('id, cliente_id, fecha, monto')
+      .in('cliente_id', clienteIds)
+    if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
+    const filas = leerAbonosConCliente(data)
+    if (!filas) return { ok: false, mensaje: 'No se pudo leer la lista de abonos.' }
+    const agrupados = organizarAbonosPorCliente(filas)
+    const porCliente: Record<string, Abono[]> = {}
+    for (const [clienteId, lista] of Object.entries(agrupados)) {
+      porCliente[clienteId] = lista.map(({ id, fecha, monto }) => ({ id, fecha, monto }))
+    }
+    return { ok: true, datos: porCliente }
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
+  }
+}
+
+/** Fechas de abono de todas las clientas, en un solo viaje, para no esperar la lista. */
+export async function listarFechasAbono(): Promise<Resultado<Record<string, string>>> {
+  const db = preparar()
+  if (esFallo(db)) return db
+
+  try {
+    const { data, error } = await db
+      .from('abonos')
+      .select('cliente_id, fecha')
+      .order('fecha', { ascending: false })
+      .limit(10000)
+    if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
+    const filas = leerFechasAbono(data)
+    if (!filas) return { ok: false, mensaje: 'No se pudo leer la fecha de los abonos.' }
+    return { ok: true, datos: ultimasFechasAbono(filas) }
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
+  }
+}
+
 /** Fecha del último abono de cada clienta. Quien no aparece no tiene abonos. */
 export async function listarUltimosAbonos(clienteIds: string[]): Promise<Resultado<Record<string, string>>> {
   if (clienteIds.length === 0) return { ok: true, datos: {} }
@@ -723,6 +771,24 @@ function leerCliente(valor: unknown): Cliente | null {
     estado: fila.estado,
     saldo_favor: redondear2(Math.max(0, saldo)),
   }
+}
+
+function leerAbonosConCliente(
+  data: unknown,
+): { clienteId: string; id: string; fecha: string; monto: number }[] | null {
+  if (!Array.isArray(data)) return null
+  const filas: { clienteId: string; id: string; fecha: string; monto: number }[] = []
+  for (const valor of data) {
+    if (typeof valor !== 'object' || valor === null) return null
+    const fila = valor as Record<string, unknown>
+    const clienteId = typeof fila.cliente_id === 'string' ? fila.cliente_id : ''
+    const abonos = leerAbonos([fila])
+    if (!clienteId || !abonos) return null
+    const abono = abonos[0]
+    if (!abono) return null
+    filas.push({ clienteId, ...abono })
+  }
+  return filas
 }
 
 function leerFechasAbono(data: unknown): { clienteId: string; fecha: string }[] | null {

@@ -1,18 +1,30 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Bell, ChevronDown, ChevronUp } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
+import { CampanaAbono } from '../components/CampanaAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
+import { FilaTablaDesplegable, PanelDesplegable, transicionDesplegar } from '../components/PanelDesplegable.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
-import { abonoAtrasado } from '../lib/abonoAtrasado.ts'
+import { abonoAtrasado, ultimasFechasAbono } from '../lib/abonoAtrasado.ts'
+import {
+  CLAVE_ABONOS_CANASTA,
+  CLAVE_CANASTAS,
+  CLAVE_ENVIOS,
+  leerCache,
+  pedirDatos,
+  reemplazarCache,
+} from '../lib/cacheLectura.ts'
+import { subirAlInicio } from '../lib/dispositivo.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
-import { totalesCanastasAbiertas, totalesSemana, type GrupoPrecio } from '../lib/reglas.ts'
+import { canastaAbiertaDesdeEstado, rutaAbonoDesdeCanasta } from '../lib/navegacion.ts'
+import { totalesCanastasAbiertas, totalesSemana, type GrupoDia, type GrupoPrecio } from '../lib/reglas.ts'
 import {
   MENSAJE_CANASTA_VACIA,
   TIPOS_ENVIO,
@@ -25,7 +37,7 @@ import {
   type EnvioSemana,
   type TipoEnvio,
 } from '../services/envios.ts'
-import { listarUltimosAbonos } from '../services/clientes.ts'
+import { listarAbonosDeClientes, type Abono } from '../services/clientes.ts'
 
 type AvisoEstado = { texto: string; tono: 'ok' | 'error' }
 type PasoSelector = 'menu' | 'tipo'
@@ -39,7 +51,7 @@ const boton = `${botonBase} min-h-12 w-full px-4 py-3 text-base`
 
 const botonCompacto = `${botonBase} min-h-10 w-auto whitespace-nowrap px-4 py-2 text-sm`
 
-const consultaPc = '(min-width: 1024px)'
+const consultaPc = '(min-width: 980px)'
 
 const etiquetasTipo: Record<TipoEnvio, string> = {
   local: 'Local',
@@ -51,6 +63,14 @@ const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 
 const toque = { scale: 0.97 }
 const Enlace = motion.create(Link)
+
+function fechasDeAbonos(abonos: Record<string, Abono[]>): Record<string, string> {
+  return ultimasFechasAbono(
+    Object.entries(abonos).flatMap(([clienteId, lista]) =>
+      lista.map((abono) => ({ clienteId, fecha: abono.fecha })),
+    ),
+  )
+}
 
 function usePantallaPc() {
   const [esPc, setEsPc] = useState(() => window.matchMedia(consultaPc).matches)
@@ -67,21 +87,34 @@ function usePantallaPc() {
 
 export function Canasta() {
   const { nombre, subtitulo, acento } = secciones.canasta
+  const ubicacion = useLocation()
+  const abiertaInicial = canastaAbiertaDesdeEstado(ubicacion.state)
   const { enLinea } = useConexion()
   const esPc = usePantallaPc()
   const montado = useRef(true)
+  const generacion = useRef(0)
   const enviando = useRef(false)
   const reducirMovimiento = useReducedMotion()
   const [vista, setVista] = useState<VistaCanasta>('abiertas')
   const [aviso, setAviso] = useState<AvisoEstado | null>(null)
-  const [cargando, setCargando] = useState(true)
-  const [canastas, setCanastas] = useState<CanastaAbierta[]>([])
-  const [ultimosAbonos, setUltimosAbonos] = useState<Record<string, string> | null>(null)
-  const [envios, setEnvios] = useState<EnvioSemana[]>([])
+  const [cargando, setCargando] = useState(() => leerCache<CanastaAbierta[]>(CLAVE_CANASTAS) == null)
+  const [canastas, setCanastas] = useState<CanastaAbierta[]>(
+    () => leerCache<CanastaAbierta[]>(CLAVE_CANASTAS) ?? [],
+  )
+  const [ultimosAbonos, setUltimosAbonos] = useState<Record<string, string> | null>(() => {
+    const guardados = leerCache<Record<string, Abono[]>>(CLAVE_ABONOS_CANASTA)
+    return guardados ? fechasDeAbonos(guardados) : null
+  })
+  const [abonosPorCliente, setAbonosPorCliente] = useState<Record<string, Abono[]>>(
+    () => leerCache<Record<string, Abono[]>>(CLAVE_ABONOS_CANASTA) ?? {},
+  )
+  const [errorAbonos, setErrorAbonos] = useState(false)
+  const [envios, setEnvios] = useState<EnvioSemana[]>(() => leerCache<EnvioSemana[]>(CLAVE_ENVIOS) ?? [])
   const [errorCanastas, setErrorCanastas] = useState<string | null>(null)
   const [errorHistorial, setErrorHistorial] = useState<string | null>(null)
   const [recarga, setRecarga] = useState(0)
-  const [abiertaId, setAbiertaId] = useState<string | null>(null)
+  const [abiertaId, setAbiertaId] = useState<string | null>(abiertaInicial)
+  const desplazarA = useRef(abiertaInicial)
   const [selector, setSelector] = useState<Selector | null>(null)
   const [enviandoId, setEnviandoId] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
@@ -95,45 +128,73 @@ export function Canasta() {
 
   useEffect(() => {
     let vigente = true
+    const marca = generacion.current
+    const teniaCanastas = leerCache<CanastaAbierta[]>(CLAVE_CANASTAS) != null
+    const teniaEnvios = leerCache<EnvioSemana[]>(CLAVE_ENVIOS) != null
+    const teniaAbonos = leerCache<Record<string, Abono[]>>(CLAVE_ABONOS_CANASTA) != null
+    if (!teniaCanastas) setCargando(true)
+
+    const borradoPromesa = borrarEnviosAntiguos()
 
     void (async () => {
-      setCargando(true)
-      const borrado = await borrarEnviosAntiguos()
-      if (!vigente) return
       const [canastasResultado, enviosResultado] = await Promise.all([
-        listarCanastasAbiertas(),
-        listarEnviosSemana(),
+        pedirDatos(CLAVE_CANASTAS, listarCanastasAbiertas, { fresco: recarga > 0 }),
+        pedirDatos(CLAVE_ENVIOS, listarEnviosSemana, { fresco: recarga > 0 }),
       ])
-      if (!vigente) return
+      if (!vigente || generacion.current !== marca) return
 
-      const abonosResultado = canastasResultado.ok
-        ? await listarUltimosAbonos(canastasResultado.datos.map((canasta) => canasta.clienteId))
-        : null
-      if (!vigente) return
-
-      setCargando(false)
       if (!canastasResultado.ok) {
-        setCanastas([])
-        setUltimosAbonos(null)
-        setErrorCanastas(canastasResultado.mensaje)
+        if (!teniaCanastas) {
+          setCanastas([])
+          setErrorCanastas(canastasResultado.mensaje)
+        }
       } else {
         setCanastas(canastasResultado.datos)
-        setUltimosAbonos(abonosResultado?.ok ? abonosResultado.datos : null)
         setErrorCanastas(null)
       }
+
       if (!enviosResultado.ok) {
-        setEnvios([])
-        setErrorHistorial(enviosResultado.mensaje)
+        if (!teniaEnvios) {
+          setEnvios([])
+          setErrorHistorial(enviosResultado.mensaje)
+        }
       } else {
         setEnvios(enviosResultado.datos)
         setErrorHistorial(null)
       }
 
-      if (!canastasResultado.ok) setAviso({ texto: canastasResultado.mensaje, tono: 'error' })
-      else if (!enviosResultado.ok) setAviso({ texto: enviosResultado.mensaje, tono: 'error' })
+      setCargando(false)
+
+      const abonosResultado = canastasResultado.ok
+        ? await pedirDatos(
+            CLAVE_ABONOS_CANASTA,
+            () => listarAbonosDeClientes(canastasResultado.datos.map((canasta) => canasta.clienteId)),
+            { fresco: true },
+          )
+        : null
+      if (!vigente || generacion.current !== marca) return
+
+      if (canastasResultado.ok) {
+        if (abonosResultado?.ok) {
+          setAbonosPorCliente(abonosResultado.datos)
+          setUltimosAbonos(fechasDeAbonos(abonosResultado.datos))
+          setErrorAbonos(false)
+        } else if (!teniaAbonos) {
+          setAbonosPorCliente({})
+          setUltimosAbonos(null)
+          setErrorAbonos(true)
+        }
+      }
+
+      const borrado = await borradoPromesa
+      if (!vigente || generacion.current !== marca) return
+
+      if (!canastasResultado.ok && !teniaCanastas) setAviso({ texto: canastasResultado.mensaje, tono: 'error' })
+      else if (!enviosResultado.ok && !teniaEnvios) setAviso({ texto: enviosResultado.mensaje, tono: 'error' })
       else if (!borrado.ok) setAviso({ texto: borrado.mensaje, tono: 'error' })
-      else if (abonosResultado && !abonosResultado.ok) setAviso({ texto: abonosResultado.mensaje, tono: 'error' })
-      else setAviso((actual) => (actual?.tono === 'error' ? null : actual))
+      else if (abonosResultado && !abonosResultado.ok && !teniaAbonos) {
+        setAviso({ texto: abonosResultado.mensaje, tono: 'error' })
+      } else setAviso((actual) => (actual?.tono === 'error' ? null : actual))
     })()
 
     return () => {
@@ -141,10 +202,16 @@ export function Canasta() {
     }
   }, [recarga])
 
+  useEffect(() => {
+    if (cargando || !desplazarA.current) return
+    const id = desplazarA.current
+    desplazarA.current = null
+    document.getElementById(`canasta-${id}`)?.scrollIntoView({ block: 'center' })
+  }, [cargando])
+
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
     setAviso({ texto, tono })
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+    subirAlInicio()
   }
 
   async function confirmarEnvio(canasta: CanastaAbierta, tipo: TipoEnvio) {
@@ -170,11 +237,22 @@ export function Canasta() {
       return
     }
 
-    setCanastas((actual) => actual.filter((fila) => fila.clienteId !== canasta.clienteId))
-    setEnvios((actual) => [
-      resultado.datos.envio,
-      ...actual.filter((envio) => envio.id !== resultado.datos.envio.id),
-    ])
+    let siguientesCanastas: CanastaAbierta[] | null = null
+    setCanastas((actual) => {
+      siguientesCanastas = actual.filter((fila) => fila.clienteId !== canasta.clienteId)
+      return siguientesCanastas
+    })
+    let siguientesEnvios: EnvioSemana[] | null = null
+    setEnvios((actual) => {
+      siguientesEnvios = [
+        resultado.datos.envio,
+        ...actual.filter((envio) => envio.id !== resultado.datos.envio.id),
+      ]
+      return siguientesEnvios
+    })
+    generacion.current += 1
+    if (siguientesCanastas) reemplazarCache(CLAVE_CANASTAS, siguientesCanastas)
+    if (siguientesEnvios) reemplazarCache(CLAVE_ENVIOS, siguientesEnvios)
     setSelector(null)
     setAbiertaId((actual) => (actual === canasta.clienteId ? null : actual))
     setErrorHistorial(null)
@@ -185,8 +263,14 @@ export function Canasta() {
       listarEnviosSemana(),
     ])
     if (!montado.current) return
-    if (canastasNuevas.ok) setCanastas(canastasNuevas.datos)
-    if (enviosNuevos.ok) setEnvios(enviosNuevos.datos)
+    if (canastasNuevas.ok) {
+      reemplazarCache(CLAVE_CANASTAS, canastasNuevas.datos)
+      setCanastas(canastasNuevas.datos)
+    }
+    if (enviosNuevos.ok) {
+      reemplazarCache(CLAVE_ENVIOS, enviosNuevos.datos)
+      setEnvios(enviosNuevos.datos)
+    }
   }
 
   const ocupado = enviandoId !== null
@@ -203,8 +287,7 @@ export function Canasta() {
 
   function irA(destino: VistaCanasta) {
     setVista(destino)
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+    subirAlInicio()
   }
 
   return (
@@ -264,6 +347,7 @@ export function Canasta() {
               canastas={canastasVisibles}
               acento={acento}
               sinAbono={sinAbono}
+              abonosDe={(id) => (errorAbonos ? null : (abonosPorCliente[id] ?? []))}
               abiertaId={abiertaId}
               selector={selector}
               ocupado={ocupado}
@@ -287,6 +371,7 @@ export function Canasta() {
                   canasta={canasta}
                   acento={acento}
                   sinAbono={sinAbono(canasta.clienteId)}
+                  abonos={errorAbonos ? null : (abonosPorCliente[canasta.clienteId] ?? [])}
                   abierta={abiertaId === canasta.clienteId}
                   selector={selector?.clienteId === canasta.clienteId ? selector : null}
                   ocupado={ocupado}
@@ -313,29 +398,19 @@ export function Canasta() {
           ) : null}
         </>
       ) : (
-        <>
-          <motion.button
-            type="button"
-            onClick={() => irA('abiertas')}
-            whileTap={reducirMovimiento ? undefined : toque}
-            transition={{ duration: 0.15 }}
-            className={`${boton} bg-black/5 lg:w-auto lg:self-start lg:px-6`}
-          >
-            Canastas abiertas
-          </motion.button>
-          {!cargando && !errorHistorial && envios.length > 0 ? (
-            <BuscadorClientes valor={busqueda} onCambiar={setBusqueda} />
-          ) : null}
-          <HistorialSemana
-            acento={acento}
-            envios={enviosVisibles}
-            todos={envios}
-            error={errorHistorial}
-            cargando={cargando}
-            esPc={esPc}
-            onReintentar={() => setRecarga((valor) => valor + 1)}
-          />
-        </>
+        <HistorialSemana
+          acento={acento}
+          envios={enviosVisibles}
+          todos={envios}
+          error={errorHistorial}
+          cargando={cargando}
+          esPc={esPc}
+          busqueda={busqueda}
+          reducirMovimiento={reducirMovimiento}
+          onBusqueda={setBusqueda}
+          onCanastas={() => irA('abiertas')}
+          onReintentar={() => setRecarga((valor) => valor + 1)}
+        />
       )}
     </Layout>
   )
@@ -385,37 +460,16 @@ function ResumenAbiertas({
   )
 }
 
-function NombreConCampana({
-  nombre,
-  sinAbono,
-  className,
-}: {
-  nombre: string | null
-  sinAbono: boolean
-  className: string
-}) {
-  if (!nombre && !sinAbono) return null
-  return (
-    <span className={`flex items-center gap-1.5 ${className}`}>
-      {nombre ? <span className="min-w-0 break-words">{nombre}</span> : null}
-      {sinAbono ? <CampanaAbono /> : null}
-    </span>
-  )
-}
-
-function CampanaAbono() {
-  return (
-    <span className="inline-flex shrink-0" title="Sin abono en 5 días">
-      <Bell aria-hidden size={16} strokeWidth={2.25} />
-      <span className="sr-only">Sin abono en los últimos 5 días</span>
-    </span>
-  )
+function NombreCliente({ nombre, className }: { nombre: string | null; className: string }) {
+  if (!nombre) return null
+  return <span className={`min-w-0 break-words ${className}`}>{nombre}</span>
 }
 
 function FilaCanasta({
   canasta,
   acento,
   sinAbono,
+  abonos,
   abierta,
   selector,
   ocupado,
@@ -430,6 +484,7 @@ function FilaCanasta({
   canasta: CanastaAbierta
   acento: string
   sinAbono: boolean
+  abonos: Abono[] | null
   abierta: boolean
   selector: Selector | null
   ocupado: boolean
@@ -446,7 +501,7 @@ function FilaCanasta({
   return (
     <li
       id={`canasta-${canasta.clienteId}`}
-      className={`flex scroll-mt-4 flex-col gap-4 rounded-3xl p-5 shadow-sm ${sinAbono ? 'bg-peligro' : 'bg-white'}`}
+      className={`flex scroll-mt-4 flex-col rounded-3xl p-5 shadow-sm ${sinAbono ? 'bg-peligro' : 'bg-white'}`}
     >
       <button
         type="button"
@@ -457,12 +512,15 @@ function FilaCanasta({
       >
         <span className="flex items-start justify-between gap-3">
           <span className="min-w-0">
-            <span className="block break-words font-display text-4xl uppercase leading-none tracking-wide">
-              {canasta.codigo}
+            <span className="flex items-center gap-1.5">
+              <span className="min-w-0 break-words font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
+                {canasta.codigo}
+              </span>
+              {sinAbono ? <CampanaAbono /> : null}
             </span>
-            <NombreConCampana nombre={canasta.nombre} sinAbono={sinAbono} className="mt-2 text-sm" />
+            <NombreCliente nombre={canasta.nombre} className="mt-2 block text-sm" />
           </span>
-          <span className="shrink-0 pt-1 text-xl font-bold leading-none">{textoCantidad(canasta.prendas)}</span>
+          <span className="shrink-0 pt-0.5 text-xl font-bold leading-none">{textoCantidad(canasta.prendas)}</span>
         </span>
         <span className="mt-4 grid grid-cols-3 gap-2">
           <Monto etiqueta="Total" valor={canasta.total} />
@@ -471,20 +529,26 @@ function FilaCanasta({
         </span>
       </button>
 
-      {abierta ? <ListaPrendas id={detalleId} grupos={canasta.grupos} /> : null}
+      <PanelDesplegable abierto={abierta}>
+        <div className="pt-4">
+          <DetalleCanasta id={detalleId} grupos={canasta.grupos} dias={canasta.dias} abonos={abonos} />
+        </div>
+      </PanelDesplegable>
 
-      <AccionesCanasta
-        canasta={canasta}
-        acento={acento}
-        selector={selector}
-        ocupado={ocupado}
-        enviando={enviando}
-        onAbrirSelector={onAbrirSelector}
-        onCerrarSelector={onCerrarSelector}
-        onEnviado={onEnviado}
-        onElegirTipo={onElegirTipo}
-        onConfirmar={onConfirmar}
-      />
+      <div className="pt-4">
+        <AccionesCanasta
+          canasta={canasta}
+          acento={acento}
+          selector={selector}
+          ocupado={ocupado}
+          enviando={enviando}
+          onAbrirSelector={onAbrirSelector}
+          onCerrarSelector={onCerrarSelector}
+          onEnviado={onEnviado}
+          onElegirTipo={onElegirTipo}
+          onConfirmar={onConfirmar}
+        />
+      </div>
     </li>
   )
 }
@@ -493,6 +557,7 @@ function TablaCanastas({
   canastas,
   acento,
   sinAbono,
+  abonosDe,
   abiertaId,
   selector,
   ocupado,
@@ -507,6 +572,7 @@ function TablaCanastas({
   canastas: CanastaAbierta[]
   acento: string
   sinAbono: (clienteId: string) => boolean
+  abonosDe: (clienteId: string) => Abono[] | null
   abiertaId: string | null
   selector: Selector | null
   ocupado: boolean
@@ -521,14 +587,22 @@ function TablaCanastas({
   return (
     <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[880px] border-collapse text-left lg:[&_td]:px-5 lg:[&_td]:py-4 lg:[&_th]:px-5 lg:[&_th]:py-4">
+        <table className="w-full min-w-[920px] border-collapse text-left lg:[&_td]:px-4 lg:[&_td]:py-2.5 lg:[&_th]:px-4 lg:[&_th]:py-3">
           <caption className="sr-only">Canastas abiertas</caption>
+          <colgroup>
+            <col className="w-[1%]" />
+            <col className="w-[5.5rem]" />
+            <col className="w-[7.5rem]" />
+            <col className="w-[7.5rem]" />
+            <col className="w-[7.5rem]" />
+            <col />
+          </colgroup>
           <thead>
             <tr className="text-sm" style={{ backgroundColor: acento }}>
-              <th scope="col" className="px-4 py-3 font-semibold">
+              <th scope="col" className="px-4 py-3 pr-2 font-semibold">
                 Código
               </th>
-              <th scope="col" className="px-4 py-3 text-right font-semibold">
+              <th scope="col" className="px-4 py-3 pl-2 text-right font-semibold">
                 Prendas
               </th>
               <th scope="col" className="px-4 py-3 text-right font-semibold">
@@ -554,6 +628,7 @@ function TablaCanastas({
                   canasta={canasta}
                   acento={acento}
                   sinAbono={sinAbono(canasta.clienteId)}
+                  abonos={abonosDe(canasta.clienteId)}
                   abierta={abierta}
                   selector={selector?.clienteId === canasta.clienteId ? selector : null}
                   ocupado={ocupado}
@@ -578,6 +653,7 @@ function FilasTabla({
   canasta,
   acento,
   sinAbono,
+  abonos,
   abierta,
   selector,
   ocupado,
@@ -592,6 +668,7 @@ function FilasTabla({
   canasta: CanastaAbierta
   acento: string
   sinAbono: boolean
+  abonos: Abono[] | null
   abierta: boolean
   selector: Selector | null
   ocupado: boolean
@@ -616,28 +693,31 @@ function FilasTabla({
     <>
       <tr
         id={`canasta-${canasta.clienteId}`}
-        className={`scroll-mt-4 border-b border-black/10 align-top ${sinAbono ? 'bg-peligro' : abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
+        className={`scroll-mt-4 border-b border-black/10 align-middle ${sinAbono ? 'bg-peligro' : abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
         onClick={alternarSiEsDato}
       >
-        <td className="px-4 py-3">
-          <button
-            type="button"
-            aria-expanded={abierta}
-            aria-controls={detalleId}
-            onClick={onAlternar}
-            className="break-words text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-          >
-            {canasta.codigo}
-          </button>
-          <NombreConCampana nombre={canasta.nombre} sinAbono={sinAbono} className="mt-1 text-sm" />
+        <td className="whitespace-nowrap px-4 py-2.5 pr-2">
+          <span className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-expanded={abierta}
+              aria-controls={detalleId}
+              onClick={onAlternar}
+              className="text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              {canasta.codigo}
+            </button>
+            {sinAbono ? <CampanaAbono /> : null}
+          </span>
+          <NombreCliente nombre={canasta.nombre} className="mt-1 block text-sm" />
         </td>
-        <td className="px-4 py-3 text-right text-xl font-bold tabular-nums leading-none">
+        <td className="px-4 py-2.5 pl-2 text-right text-xl font-bold tabular-nums leading-none">
           {canasta.prendas}
         </td>
-        <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(canasta.total)}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(canasta.saldoFavor)}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(canasta.saldo)}</td>
-        <td className="px-4 py-3">
+        <td className="px-4 py-2.5 text-right tabular-nums">{formatearDolares(canasta.total)}</td>
+        <td className="px-4 py-2.5 text-right tabular-nums">{formatearDolares(canasta.saldoFavor)}</td>
+        <td className="px-4 py-2.5 text-right tabular-nums">{formatearDolares(canasta.saldo)}</td>
+        <td className="px-4 py-2.5">
           <AccionesCanasta
             canasta={canasta}
             acento={acento}
@@ -653,37 +733,160 @@ function FilasTabla({
           />
         </td>
       </tr>
-      {abierta ? (
-        <tr className="border-b border-black/10 bg-fondo">
-          <td colSpan={6} className="px-4 py-4">
-            <div className="max-w-sm lg:max-w-lg">
-              <ListaPrendas id={detalleId} grupos={canasta.grupos} />
-            </div>
-          </td>
-        </tr>
-      ) : null}
+      <FilaTablaDesplegable abierto={abierta} colSpan={6}>
+        <div className="px-6 py-4">
+          <DetalleCanasta
+            id={detalleId}
+            grupos={canasta.grupos}
+            dias={canasta.dias}
+            abonos={abonos}
+            holgado
+          />
+        </div>
+      </FilaTablaDesplegable>
     </>
   )
 }
 
-function ListaPrendas({ id, grupos }: { id: string; grupos: GrupoPrecio[] }) {
-  const tituloId = `${id}-titulo`
+function DetalleCanasta({
+  id,
+  grupos,
+  dias,
+  abonos,
+  holgado = false,
+}: {
+  id: string
+  grupos: GrupoPrecio[]
+  dias: GrupoDia[]
+  abonos: Abono[] | null
+  holgado?: boolean
+}) {
+  return (
+    <div
+      id={id}
+      className={
+        holgado
+          ? 'grid max-w-3xl grid-cols-[minmax(0,1fr)_15rem] items-start gap-x-10'
+          : 'grid grid-cols-[minmax(0,1fr)_auto] items-start'
+      }
+    >
+      <div className={holgado ? 'min-w-0 pr-6' : 'min-w-0 pr-3'}>
+        <ListaPrendas grupos={grupos} dias={dias} apretado={!holgado} />
+      </div>
+      <div
+        className={
+          holgado
+            ? 'min-w-0 border-l border-black/15 pl-6'
+            : 'min-w-[7.25rem] border-l border-black/10 pl-3'
+        }
+      >
+        <ListaAbonos abonos={abonos} holgado={holgado} />
+      </div>
+    </div>
+  )
+}
+
+function ListaAbonos({ abonos, holgado = false }: { abonos: Abono[] | null; holgado?: boolean }) {
+  const tituloId = useId()
 
   return (
-    <section id={id} className="flex flex-col gap-3" aria-labelledby={tituloId}>
-      <h3 id={tituloId} className="text-base">
+    <section className="flex min-w-0 flex-col gap-2" aria-labelledby={tituloId}>
+      <h3 id={tituloId} className="text-base font-semibold">
+        Abonos
+      </h3>
+      {abonos == null ? (
+        <p className="text-sm text-black/60">No se pudieron cargar los abonos.</p>
+      ) : abonos.length === 0 ? (
+        <p className="text-sm text-black/60">Aún no hay abonos.</p>
+      ) : (
+        <ul
+          className={`flex flex-col overflow-y-auto ${holgado ? 'max-h-72 gap-1.5' : 'max-h-52 gap-2'}`}
+        >
+          {abonos.map((abono) => (
+            <li
+              key={abono.id}
+              className="flex items-baseline justify-between gap-3 text-base tabular-nums"
+            >
+              <span className="min-w-0 truncate text-black/70">{textoFecha(abono.fecha)}</span>
+              <span className="shrink-0">{formatearDolares(abono.monto)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function ListaPrendas({
+  id,
+  grupos,
+  dias = [],
+  apretado = false,
+}: {
+  id?: string
+  grupos: GrupoPrecio[]
+  dias?: GrupoDia[]
+  apretado?: boolean
+}) {
+  const internoId = useId()
+  const tituloId = `${id ?? internoId}-titulo`
+  const porDia = dias.filter((dia) => dia.prendas > 0)
+  const usarDias = porDia.some((dia) => dia.fecha)
+  const linea = apretado
+    ? 'flex items-baseline justify-between gap-2 text-base tabular-nums'
+    : 'flex items-baseline justify-between gap-3 text-base tabular-nums'
+  const titulo = 'text-base font-semibold'
+
+  return (
+    <section id={id} className="flex min-w-0 flex-col gap-2" aria-labelledby={tituloId}>
+      <h3 id={tituloId} className={titulo}>
         Prendas
       </h3>
-      <ul className="flex flex-col gap-3">
-        {grupos.map((grupo) => (
-          <li key={grupo.precio} className="flex items-baseline justify-between gap-3">
-            <span>
-              {formatearDolares(grupo.precio)} × {grupo.cantidad}
-            </span>
-            <span>{formatearDolares(grupo.subtotal)}</span>
-          </li>
-        ))}
-      </ul>
+      {usarDias ? (
+        <ul className={`flex flex-col ${apretado ? 'gap-3' : 'gap-3.5'}`}>
+          {porDia.map((dia) => (
+            <li key={dia.fecha || 'sin-fecha'} className={`flex flex-col ${apretado ? 'gap-1.5' : 'gap-1'}`}>
+              <h4 className="text-sm text-black/60">
+                {dia.fecha ? textoFecha(dia.fecha) : 'Sin fecha'}
+                {apretado ? ` · ${dia.prendas}` : ` · ${textoCantidad(dia.prendas)}`}
+              </h4>
+              <ul className={`flex flex-col ${apretado ? 'gap-1.5' : 'gap-1'}`}>
+                {dia.grupos.map((grupo) => (
+                  <li key={grupo.precio} className={linea}>
+                    <span className="min-w-0">
+                      {formatearDolares(grupo.precio)}
+                      {apretado ? '×' : ' × '}
+                      {grupo.cantidad}
+                    </span>
+                    <span className="shrink-0">{formatearDolares(grupo.subtotal)}</span>
+                  </li>
+                ))}
+              </ul>
+              {!apretado && porDia.length > 1 ? (
+                <p className="mt-0.5 flex justify-end text-base tabular-nums">
+                  <span className="flex shrink-0 items-baseline gap-1.5 font-semibold">
+                    <span>Total</span>
+                    <span>{formatearDolares(dia.total)}</span>
+                  </span>
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul className={`flex flex-col ${apretado ? 'gap-1.5' : 'gap-1'}`}>
+          {grupos.map((grupo) => (
+            <li key={grupo.precio} className={linea}>
+              <span className="min-w-0">
+                {formatearDolares(grupo.precio)}
+                {apretado ? '×' : ' × '}
+                {grupo.cantidad}
+              </span>
+              <span className="shrink-0">{formatearDolares(grupo.subtotal)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
@@ -719,8 +922,8 @@ function AccionesCanasta({
   const bloqueada = ocupado || enviando
 
   return (
-    <div className={compacto ? 'flex flex-wrap items-start justify-end gap-2' : 'flex flex-col gap-4'}>
-      <div className={compacto ? 'contents' : 'grid grid-cols-2 gap-3'}>
+    <div className={compacto ? 'flex flex-nowrap items-center justify-end gap-2' : 'flex flex-col gap-4'}>
+      <div className={compacto ? 'flex flex-nowrap items-center gap-2' : 'grid grid-cols-2 gap-3'}>
         <Enlace
           to={`/compartir/${canasta.clienteId}`}
           state={{ desde: 'canasta' }}
@@ -736,7 +939,7 @@ function AccionesCanasta({
           Enviar total
         </Enlace>
         <Enlace
-          to={`/abonos?cliente=${encodeURIComponent(canasta.clienteId)}`}
+          to={rutaAbonoDesdeCanasta(canasta.clienteId)}
           aria-disabled={bloqueada || undefined}
           tabIndex={bloqueada ? -1 : undefined}
           onClick={(evento) => {
@@ -750,23 +953,22 @@ function AccionesCanasta({
           Abono
         </Enlace>
       </div>
-      <div className={compacto ? 'w-44' : undefined}>
-        <SelectorEnvio
-          codigo={canasta.codigo}
-          acento={acento}
-          abierto={selector !== null}
-          paso={selector?.paso ?? 'menu'}
-          tipo={selector?.tipo ?? null}
-          ocupado={bloqueado}
-          enviando={enviando}
-          onAbrir={onAbrirSelector}
-          onBodega={onCerrarSelector}
-          onEnviado={onEnviado}
-          onElegirTipo={onElegirTipo}
-          onConfirmar={onConfirmar}
-          onCancelar={onCerrarSelector}
-        />
-      </div>
+      <SelectorEnvio
+        codigo={canasta.codigo}
+        acento={acento}
+        compacto={compacto}
+        abierto={selector !== null}
+        paso={selector?.paso ?? 'menu'}
+        tipo={selector?.tipo ?? null}
+        ocupado={bloqueado}
+        enviando={enviando}
+        onAbrir={onAbrirSelector}
+        onBodega={onCerrarSelector}
+        onEnviado={onEnviado}
+        onElegirTipo={onElegirTipo}
+        onConfirmar={onConfirmar}
+        onCancelar={onCerrarSelector}
+      />
     </div>
   )
 }
@@ -810,6 +1012,7 @@ function Monto({ etiqueta, valor }: { etiqueta: string; valor: number }) {
 function SelectorEnvio({
   codigo,
   acento,
+  compacto = false,
   abierto,
   paso,
   tipo,
@@ -824,6 +1027,7 @@ function SelectorEnvio({
 }: {
   codigo: string
   acento: string
+  compacto?: boolean
   abierto: boolean
   paso: PasoSelector
   tipo: TipoEnvio | null
@@ -837,11 +1041,14 @@ function SelectorEnvio({
   onCancelar: () => void
 }) {
   const { enLinea } = useConexion()
+  const reducirMovimiento = useReducedMotion()
   const panelId = useId()
   const refBoton = useRef<HTMLButtonElement>(null)
   const refPanel = useRef<HTMLDivElement>(null)
   const [caja, setCaja] = useState<{ top: number; right: number; width: number } | null>(null)
   const etiqueta = abierto && paso === 'tipo' ? 'Enviado' : 'Bodega'
+  const colorEstado = etiqueta === 'Enviado' ? 'bg-afirmar' : 'bg-fondo'
+  const salto = reducirMovimiento === true
 
   useEffect(() => {
     if (!abierto) {
@@ -895,11 +1102,14 @@ function SelectorEnvio({
   const panel =
     abierto && caja
       ? createPortal(
-          <div
+          <motion.div
             ref={refPanel}
             id={panelId}
             role="group"
             aria-label={paso === 'tipo' ? `Tipo de envío de ${codigo}` : `Estado de ${codigo}`}
+            initial={salto ? false : { opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={salto ? { duration: 0 } : transicionDesplegar}
             className="fixed z-50 flex flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
             style={{ top: caja.top, right: caja.right, width: caja.width }}
           >
@@ -942,7 +1152,7 @@ function SelectorEnvio({
                 </button>
               </>
             )}
-          </div>,
+          </motion.div>,
           document.body,
         )
       : null
@@ -958,8 +1168,11 @@ function SelectorEnvio({
         aria-label={`Estado de ${codigo}`}
         disabled={ocupado || enviando}
         onClick={() => (abierto ? onCancelar() : onAbrir())}
-        className="inline-flex min-h-12 w-full touch-manipulation items-center justify-between rounded-full px-5 py-3 text-base [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-        style={{ backgroundColor: acento }}
+        className={
+          compacto
+            ? `${botonCompacto} gap-1 ${colorEstado}`
+            : `${boton} justify-between ${colorEstado}`
+        }
       >
         {etiqueta}
         {abierto ? <ChevronUp aria-hidden size={18} /> : <ChevronDown aria-hidden size={18} />}
@@ -976,6 +1189,10 @@ function HistorialSemana({
   error,
   cargando,
   esPc,
+  busqueda,
+  reducirMovimiento,
+  onBusqueda,
+  onCanastas,
   onReintentar,
 }: {
   acento: string
@@ -984,6 +1201,10 @@ function HistorialSemana({
   error: string | null
   cargando: boolean
   esPc: boolean
+  busqueda: string
+  reducirMovimiento: boolean | null
+  onBusqueda: (valor: string) => void
+  onCanastas: () => void
   onReintentar: () => void
 }) {
   const tituloId = useId()
@@ -995,24 +1216,39 @@ function HistorialSemana({
   }
 
   return (
-    <section aria-labelledby={tituloId} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-4 rounded-3xl p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between lg:gap-8 lg:p-8" style={{ backgroundColor: acento }}>
-        <h2 id={tituloId} className="font-display text-4xl uppercase leading-none tracking-wide">
+    <section aria-labelledby={tituloId} className="flex flex-col gap-6 lg:gap-8">
+      <div className="flex flex-col gap-5 rounded-3xl p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between lg:gap-8 lg:p-8" style={{ backgroundColor: acento }}>
+        <h2 id={tituloId} className="min-w-0 font-display text-2xl uppercase leading-none tracking-wide lg:flex-1 lg:text-4xl">
           Historial de la semana
         </h2>
-        {!error && (!cargando || todos.length > 0) ? (
-          <dl className="mt-4 grid grid-cols-2 gap-6 lg:mt-0 lg:min-w-80 lg:gap-10">
-            <div>
-              <dt className="text-sm">Total generado</dt>
-              <dd className="font-display text-3xl leading-none tracking-wide">{formatearDolares(totales.total)}</dd>
-            </div>
-            <div>
-              <dt className="text-sm">Prendas</dt>
-              <dd className="font-display text-3xl leading-none tracking-wide">{totales.prendas}</dd>
-            </div>
-          </dl>
-        ) : null}
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:gap-8">
+          {!error && (!cargando || todos.length > 0) ? (
+            <dl className="grid grid-cols-2 gap-6 lg:min-w-80 lg:gap-10">
+              <div>
+                <dt className="text-sm">Total generado</dt>
+                <dd className="font-display text-2xl leading-none tracking-wide lg:text-3xl">{formatearDolares(totales.total)}</dd>
+              </div>
+              <div>
+                <dt className="text-sm">Prendas</dt>
+                <dd className="font-display text-2xl leading-none tracking-wide lg:text-3xl">{totales.prendas}</dd>
+              </div>
+            </dl>
+          ) : null}
+          <motion.button
+            type="button"
+            onClick={onCanastas}
+            whileTap={reducirMovimiento ? undefined : toque}
+            transition={{ duration: 0.15 }}
+            className={`${boton} bg-black text-white lg:w-auto lg:shrink-0 lg:px-6`}
+          >
+            Canastas abiertas
+          </motion.button>
+        </div>
       </div>
+
+      {!cargando && !error && todos.length > 0 ? (
+        <BuscadorClientes valor={busqueda} onCambiar={onBusqueda} />
+      ) : null}
 
       {cargando ? <IndicadorCarga>Cargando historial…</IndicadorCarga> : null}
 
@@ -1101,7 +1337,7 @@ function FilaHistorial({
   const detalleId = useId()
 
   return (
-    <li id={`envio-${envio.id}`} className="flex scroll-mt-4 flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm">
+    <li id={`envio-${envio.id}`} className="flex scroll-mt-4 flex-col rounded-3xl bg-white p-5 shadow-sm">
       <button
         type="button"
         aria-expanded={abierta}
@@ -1122,7 +1358,11 @@ function FilaHistorial({
           {etiquetaTipo(envio.tipo)} · {textoCantidad(envio.prendas)} · {formatearDolares(envio.total)}
         </span>
       </button>
-      {abierta ? <DetalleEnvio id={detalleId} grupos={envio.detalle} /> : null}
+      <PanelDesplegable abierto={abierta}>
+        <div className="pt-4">
+          <DetalleEnvio id={detalleId} grupos={envio.detalle} dias={envio.dias} />
+        </div>
+      </PanelDesplegable>
     </li>
   )
 }
@@ -1171,20 +1411,24 @@ function FilasHistorial({
         <td className="px-4 py-3 text-right text-xl font-bold tabular-nums">{envio.prendas}</td>
         <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(envio.total)}</td>
       </tr>
-      {abierta ? (
-        <tr className="border-b border-black/10 bg-fondo last:border-b-0">
-          <td colSpan={5} className="px-4 py-4">
-            <div className="max-w-sm lg:max-w-lg">
-              <DetalleEnvio id={detalleId} grupos={envio.detalle} />
-            </div>
-          </td>
-        </tr>
-      ) : null}
+      <FilaTablaDesplegable abierto={abierta} colSpan={5}>
+        <div className="max-w-sm px-4 py-4 lg:max-w-lg">
+          <DetalleEnvio id={detalleId} grupos={envio.detalle} dias={envio.dias} />
+        </div>
+      </FilaTablaDesplegable>
     </>
   )
 }
 
-function DetalleEnvio({ id, grupos }: { id: string; grupos: GrupoPrecio[] }) {
+function DetalleEnvio({
+  id,
+  grupos,
+  dias,
+}: {
+  id: string
+  grupos: GrupoPrecio[]
+  dias: GrupoDia[]
+}) {
   if (grupos.length === 0) {
     return (
       <p id={id} className="text-base">
@@ -1193,7 +1437,7 @@ function DetalleEnvio({ id, grupos }: { id: string; grupos: GrupoPrecio[] }) {
     )
   }
 
-  return <ListaPrendas id={id} grupos={grupos} />
+  return <ListaPrendas id={id} grupos={grupos} dias={dias} />
 }
 
 function textoCantidad(prendas: number): string {

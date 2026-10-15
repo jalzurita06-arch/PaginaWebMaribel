@@ -6,6 +6,29 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // En el celular, «sitio de escritorio» a veces no ensancha la página.
+      // Si sigue con el ancho del teléfono, se usa el de una computadora.
+      ;(function () {
+        var agente = navigator.userAgent || ''
+        var datos = navigator.userAgentData
+        var tactil = navigator.maxTouchPoints > 0
+        var densidad = window.devicePixelRatio || 1
+        var ladoCorto = Math.min(screen.width, screen.height)
+        if (ladoCorto > 800 && densidad > 1) ladoCorto = ladoCorto / densidad
+        var esTelefono = ladoCorto > 0 && ladoCorto <= 520
+        if (!esTelefono) return
+        var androidEscritorio =
+          (/Android/i.test(agente) && !/Mobile/i.test(agente)) ||
+          (!!datos && datos.mobile === false && /android/i.test(datos.platform || ''))
+        var iphoneEscritorio = /Macintosh/i.test(agente) && tactil
+        var otroEscritorio = tactil && !/Mobile|iPhone|iPad|Android/i.test(agente)
+        if (!androidEscritorio && !iphoneEscritorio && !otroEscritorio) return
+        if ((window.innerWidth || 0) >= 980) return
+        var meta = document.querySelector('meta[name="viewport"]')
+        if (meta) meta.setAttribute('content', 'width=1280')
+      })()
+    </script>
     <meta name="theme-color" content="#F5F0E8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Negocio" />
@@ -15,7 +38,15 @@
     <link
       href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <title>Negocio</title>
   </head>
   <body>
