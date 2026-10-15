@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -7,7 +8,7 @@ import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
-import { coincideCliente, sugerirClientes } from '../lib/busqueda.ts'
+import { coincideCliente } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
 import { totalesCanastasAbiertas, totalesSemana, type GrupoPrecio } from '../lib/reglas.ts'
@@ -81,7 +82,6 @@ export function Canasta() {
   const [selector, setSelector] = useState<Selector | null>(null)
   const [enviandoId, setEnviandoId] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
-  const [envioAbiertoId, setEnvioAbiertoId] = useState<string | null>(null)
 
   useEffect(() => {
     montado.current = true
@@ -184,40 +184,6 @@ export function Canasta() {
     coincideCliente(busqueda, canasta.codigo, canasta.nombre),
   )
   const enviosVisibles = envios.filter((envio) => coincideCliente(busqueda, envio.codigo, null))
-  const sugerenciasCanasta = sugerirClientes(
-    busqueda,
-    canastas.map((canasta) => ({
-      id: canasta.clienteId,
-      codigo: canasta.codigo,
-      nombre: canasta.nombre,
-    })),
-  )
-  const sugerenciasHistorial = sugerirClientes(
-    busqueda,
-    envios.map((envio) => ({ id: envio.id, codigo: envio.codigo, nombre: null })),
-  )
-
-  function irACanasta(canasta: CanastaAbierta) {
-    setBusqueda(canasta.codigo)
-    setAbiertaId(canasta.clienteId)
-    window.setTimeout(() => {
-      document.getElementById(`canasta-${canasta.clienteId}`)?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'start',
-      })
-    }, 50)
-  }
-
-  function irAEnvio(id: string, codigo: string) {
-    setBusqueda(codigo)
-    setEnvioAbiertoId(id)
-    window.setTimeout(() => {
-      document.getElementById(`envio-${id}`)?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'start',
-      })
-    }, 50)
-  }
 
   function irA(destino: VistaCanasta) {
     setVista(destino)
@@ -262,15 +228,7 @@ export function Canasta() {
           ) : null}
 
           {!cargando && !errorCanastas && canastas.length > 0 ? (
-            <BuscadorClientes
-              valor={busqueda}
-              sugerencias={sugerenciasCanasta}
-              onCambiar={setBusqueda}
-              onElegir={(opcion) => {
-                const canasta = canastas.find((fila) => fila.clienteId === opcion.id)
-                if (canasta) irACanasta(canasta)
-              }}
-            />
+            <BuscadorClientes valor={busqueda} onCambiar={setBusqueda} />
           ) : null}
 
           {!cargando && !errorCanastas && canastas.length === 0 ? (
@@ -348,18 +306,12 @@ export function Canasta() {
             Canastas abiertas
           </motion.button>
           {!cargando && !errorHistorial && envios.length > 0 ? (
-            <BuscadorClientes
-              valor={busqueda}
-              sugerencias={sugerenciasHistorial}
-              onCambiar={setBusqueda}
-              onElegir={(opcion) => irAEnvio(opcion.id, opcion.codigo)}
-            />
+            <BuscadorClientes valor={busqueda} onCambiar={setBusqueda} />
           ) : null}
           <HistorialSemana
             acento={acento}
             envios={enviosVisibles}
             todos={envios}
-            destacadoId={envioAbiertoId}
             error={errorHistorial}
             cargando={cargando}
             esPc={esPc}
@@ -766,76 +718,29 @@ function AccionesCanasta({
   )
 }
 
-type OpcionBusqueda = { id: string; codigo: string; nombre: string | null }
-
 function BuscadorClientes({
   valor,
-  sugerencias,
   onCambiar,
-  onElegir,
 }: {
   valor: string
-  sugerencias: OpcionBusqueda[]
   onCambiar: (valor: string) => void
-  onElegir: (opcion: OpcionBusqueda) => void
 }) {
   const idBusqueda = useId()
-  const idLista = useId()
-  const [abierta, setAbierta] = useState(false)
-  const mostrar = abierta && valor.trim() !== '' && sugerencias.length > 0
 
   return (
-    <div className="relative flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <label className="text-sm" htmlFor={idBusqueda}>
         Buscar
       </label>
       <input
         id={idBusqueda}
         type="search"
-        role="combobox"
-        aria-expanded={mostrar}
-        aria-controls={idLista}
-        aria-autocomplete="list"
         enterKeyHint="search"
         value={valor}
         placeholder="Código o nombre"
-        onChange={(evento) => {
-          onCambiar(evento.target.value)
-          setAbierta(true)
-        }}
-        onFocus={() => setAbierta(true)}
-        onBlur={() => window.setTimeout(() => setAbierta(false), 120)}
-        onKeyDown={(evento) => {
-          if (evento.key === 'Escape') setAbierta(false)
-        }}
+        onChange={(evento) => onCambiar(evento.target.value)}
         className="rounded-full bg-white px-5 py-4 text-base shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
       />
-      {mostrar ? (
-        <ul
-          id={idLista}
-          role="listbox"
-          className="absolute top-full z-10 mt-2 flex w-full flex-col overflow-hidden rounded-3xl bg-white py-2 shadow-md"
-        >
-          {sugerencias.map((opcion) => (
-            <li key={opcion.id} role="option" aria-selected={false}>
-              <button
-                type="button"
-                onMouseDown={(evento) => evento.preventDefault()}
-                onClick={() => {
-                  onElegir(opcion)
-                  setAbierta(false)
-                }}
-                className="flex w-full flex-col items-start px-5 py-3 text-left touch-manipulation [-webkit-tap-highlight-color:transparent] hover:bg-black/[0.04] focus-visible:bg-black/[0.04] focus-visible:outline-none"
-              >
-                <span className="font-display text-2xl uppercase leading-none tracking-wide">
-                  {opcion.codigo}
-                </span>
-                {opcion.nombre ? <span className="mt-1 text-sm text-black/60">{opcion.nombre}</span> : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   )
 }
@@ -880,29 +785,123 @@ function SelectorEnvio({
 }) {
   const { enLinea } = useConexion()
   const panelId = useId()
+  const refBoton = useRef<HTMLButtonElement>(null)
   const refPanel = useRef<HTMLDivElement>(null)
+  const [caja, setCaja] = useState<{ top: number; right: number; width: number } | null>(null)
   const etiqueta = abierto && paso === 'tipo' ? 'Enviado' : 'Bodega'
 
   useEffect(() => {
-    if (!abierto) return
-    refPanel.current?.querySelector('button')?.focus()
+    if (!abierto) {
+      setCaja(null)
+      return
+    }
+
+    function ubicar() {
+      const boton = refBoton.current?.getBoundingClientRect()
+      if (!boton) return
+      setCaja({
+        top: boton.bottom + 8,
+        right: window.innerWidth - boton.right,
+        width: Math.max(boton.width, 176),
+      })
+    }
+
+    ubicar()
+    window.addEventListener('resize', ubicar)
+    window.addEventListener('scroll', ubicar, true)
+    return () => {
+      window.removeEventListener('resize', ubicar)
+      window.removeEventListener('scroll', ubicar, true)
+    }
   }, [abierto, paso])
 
   useEffect(() => {
+    if (!abierto || !caja) return
+    refPanel.current?.querySelector('button')?.focus()
+  }, [abierto, paso, caja])
+
+  useEffect(() => {
     if (!abierto) return
-    function cerrar(evento: KeyboardEvent) {
+    function cerrarTecla(evento: KeyboardEvent) {
       if (evento.key === 'Escape' && !enviando) onCancelar()
     }
-    window.addEventListener('keydown', cerrar)
-    return () => window.removeEventListener('keydown', cerrar)
+    function cerrarClic(evento: Event) {
+      const destino = evento.target
+      if (!(destino instanceof Node)) return
+      if (refBoton.current?.contains(destino) || refPanel.current?.contains(destino)) return
+      if (!enviando) onCancelar()
+    }
+    window.addEventListener('keydown', cerrarTecla)
+    document.addEventListener('mousedown', cerrarClic)
+    return () => {
+      window.removeEventListener('keydown', cerrarTecla)
+      document.removeEventListener('mousedown', cerrarClic)
+    }
   }, [abierto, enviando, onCancelar])
 
+  const panel =
+    abierto && caja
+      ? createPortal(
+          <div
+            ref={refPanel}
+            id={panelId}
+            role="group"
+            aria-label={paso === 'tipo' ? `Tipo de envío de ${codigo}` : `Estado de ${codigo}`}
+            className="fixed z-50 flex flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
+            style={{ top: caja.top, right: caja.right, width: caja.width }}
+          >
+            {paso === 'menu' ? (
+              <>
+                <button type="button" aria-pressed onClick={onBodega} className={`${boton} bg-fondo`}>
+                  Bodega
+                </button>
+                <button type="button" onClick={onEnviado} className={`${boton} bg-afirmar`}>
+                  Enviado
+                </button>
+              </>
+            ) : (
+              <>
+                {TIPOS_ENVIO.map((opcion) => (
+                  <button
+                    key={opcion}
+                    type="button"
+                    aria-pressed={tipo === opcion}
+                    disabled={enviando}
+                    onClick={() => onElegirTipo(opcion)}
+                    className={boton}
+                    style={{ backgroundColor: tipo === opcion ? acento : '#F5F0E8', color: '#000' }}
+                  >
+                    {etiquetasTipo[opcion]}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={enviando || tipo == null || !enLinea}
+                  onClick={() => {
+                    if (tipo) onConfirmar(tipo)
+                  }}
+                  className={`inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full bg-black px-4 py-3 text-center text-base text-white [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 ${enviando ? 'opacity-50' : ''}`}
+                >
+                  {enviando ? 'Enviando…' : 'Confirmar'}
+                </button>
+                <button type="button" disabled={enviando} onClick={onCancelar} className={`${boton} bg-fondo`}>
+                  Cancelar
+                </button>
+              </>
+            )}
+          </div>,
+          document.body,
+        )
+      : null
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className="relative">
       <button
+        ref={refBoton}
         type="button"
         aria-expanded={abierto}
         aria-controls={panelId}
+        aria-haspopup="true"
         aria-label={`Estado de ${codigo}`}
         disabled={ocupado || enviando}
         onClick={() => (abierto ? onCancelar() : onAbrir())}
@@ -912,61 +911,7 @@ function SelectorEnvio({
         {etiqueta}
         {abierto ? <ChevronUp aria-hidden size={18} /> : <ChevronDown aria-hidden size={18} />}
       </button>
-
-      {abierto ? (
-        <div
-          ref={refPanel}
-          id={panelId}
-          role="group"
-          aria-label={paso === 'tipo' ? `Tipo de envío de ${codigo}` : `Estado de ${codigo}`}
-          className="flex flex-col gap-2 rounded-3xl bg-fondo p-3"
-        >
-          {paso === 'menu' ? (
-            <>
-              <button
-                type="button"
-                aria-pressed
-                onClick={onBodega}
-                className={`${boton} bg-white`}
-              >
-                Bodega
-              </button>
-              <button type="button" onClick={onEnviado} className={`${boton} bg-afirmar`}>
-                Enviado
-              </button>
-            </>
-          ) : (
-            <>
-              {TIPOS_ENVIO.map((opcion) => (
-                <button
-                  key={opcion}
-                  type="button"
-                  aria-pressed={tipo === opcion}
-                  disabled={enviando}
-                  onClick={() => onElegirTipo(opcion)}
-                  className={boton}
-                  style={{ backgroundColor: tipo === opcion ? acento : '#fff', color: '#000' }}
-                >
-                  {etiquetasTipo[opcion]}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={enviando || tipo == null || !enLinea}
-                onClick={() => {
-                  if (tipo) onConfirmar(tipo)
-                }}
-                className={`inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full bg-black px-4 py-3 text-center text-base text-white [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 ${enviando ? 'opacity-50' : ''}`}
-              >
-                {enviando ? 'Enviando…' : 'Confirmar'}
-              </button>
-              <button type="button" disabled={enviando} onClick={onCancelar} className={`${boton} bg-white`}>
-                Cancelar
-              </button>
-            </>
-          )}
-        </div>
-      ) : null}
+      {panel}
     </div>
   )
 }
@@ -975,7 +920,6 @@ function HistorialSemana({
   acento,
   envios,
   todos,
-  destacadoId,
   error,
   cargando,
   esPc,
@@ -984,7 +928,6 @@ function HistorialSemana({
   acento: string
   envios: EnvioSemana[]
   todos: EnvioSemana[]
-  destacadoId: string | null
   error: string | null
   cargando: boolean
   esPc: boolean
@@ -993,10 +936,6 @@ function HistorialSemana({
   const tituloId = useId()
   const [abiertoId, setAbiertoId] = useState<string | null>(null)
   const totales = totalesSemana(todos.map((envio) => ({ total: envio.total, prendas: envio.prendas })))
-
-  useEffect(() => {
-    if (destacadoId) setAbiertoId(destacadoId)
-  }, [destacadoId])
 
   function alternar(id: string) {
     setAbiertoId((actual) => (actual === id ? null : id))
@@ -1117,14 +1056,14 @@ function FilaHistorial({
         onClick={onAlternar}
         className="touch-manipulation text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
       >
-        <span className="flex items-start justify-between gap-3">
+        <span className="flex items-start gap-3">
+          {abierta ? <ChevronUp aria-hidden size={22} className="mt-0.5 shrink-0" /> : <ChevronDown aria-hidden size={22} className="mt-0.5 shrink-0" />}
           <span className="min-w-0">
             <span className="block text-sm text-black/60">{textoFecha(envio.fecha)}</span>
             <span className="mt-1 block break-words font-display text-3xl uppercase leading-none tracking-wide">
               {envio.codigo}
             </span>
           </span>
-          {abierta ? <ChevronUp aria-hidden size={22} /> : <ChevronDown aria-hidden size={22} />}
         </span>
         <span className="mt-3 block text-base">
           {etiquetaTipo(envio.tipo)} · {textoCantidad(envio.prendas)} · {formatearDolares(envio.total)}
@@ -1160,18 +1099,20 @@ function FilasHistorial({
         className={`scroll-mt-4 border-b border-black/10 align-top ${abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
         onClick={alternarSiEsDato}
       >
-        <td className="px-4 py-3">{textoFecha(envio.fecha)}</td>
         <td className="px-4 py-3">
           <button
             type="button"
             aria-expanded={abierta}
             aria-controls={detalleId}
             onClick={onAlternar}
-            className="inline-flex items-center gap-2 break-words text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            className="inline-flex items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
           >
-            {envio.codigo}
             {abierta ? <ChevronUp aria-hidden size={18} /> : <ChevronDown aria-hidden size={18} />}
+            {textoFecha(envio.fecha)}
           </button>
+        </td>
+        <td className="px-4 py-3 font-display text-2xl uppercase leading-none tracking-wide">
+          {envio.codigo}
         </td>
         <td className="px-4 py-3">{etiquetaTipo(envio.tipo)}</td>
         <td className="px-4 py-3 text-right text-xl font-bold tabular-nums">{envio.prendas}</td>

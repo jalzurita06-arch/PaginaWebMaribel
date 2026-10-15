@@ -478,27 +478,31 @@ function PasoBuscar({
 
       <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
         {clientes.map((cliente) => (
-          <li key={cliente.id}>
+          <li key={cliente.id} className="h-full">
             <motion.button
               type="button"
               onClick={() => onElegir(cliente)}
               disabled={revisandoId !== null}
               whileTap={reducirMovimiento || revisandoId !== null ? undefined : toque}
               transition={{ duration: 0.15 }}
-              className="flex w-full touch-manipulation items-start justify-between gap-4 rounded-3xl bg-white p-5 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+              className="flex h-full min-h-[7.5rem] w-full touch-manipulation items-start justify-between gap-4 rounded-3xl bg-white p-5 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
             >
-              <span className="min-w-0">
-                <span className="block break-words font-display text-4xl uppercase leading-none tracking-wide">
-                  {cliente.codigo}
-                </span>
-                {cliente.nombre ? (
-                  <span className="mt-2 block break-words text-sm">{cliente.nombre}</span>
-                ) : null}
-                {cliente.prendas > 0 ? (
-                  <span className="mt-2 block text-sm text-black/60">
-                    {cliente.prendas === 1 ? '1 prenda pedida' : `${cliente.prendas} prendas pedidas`}
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline gap-3">
+                  <span className="shrink-0 font-display text-4xl uppercase leading-none tracking-wide">
+                    {cliente.codigo}
                   </span>
-                ) : null}
+                  <span className="min-w-0 truncate text-sm">
+                    {cliente.nombre ?? '\u00a0'}
+                  </span>
+                </span>
+                <span className="mt-2 block min-h-5 text-sm text-black/60">
+                  {cliente.prendas > 0
+                    ? cliente.prendas === 1
+                      ? '1 prenda pedida'
+                      : `${cliente.prendas} prendas pedidas`
+                    : '\u00a0'}
+                </span>
                 {revisandoId === cliente.id ? <span className="mt-2 block text-sm">Revisando…</span> : null}
               </span>
               <EtiquetaEstado estado={cliente.estado} />

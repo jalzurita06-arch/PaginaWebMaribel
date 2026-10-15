@@ -353,22 +353,20 @@ function Buscador({
 
       <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
         {clientes.map((cliente) => (
-          <li key={cliente.id}>
+          <li key={cliente.id} className="h-full">
             <motion.button
               type="button"
               onClick={() => onElegir(cliente)}
               whileTap={reducirMovimiento ? undefined : toque}
               transition={{ duration: 0.15 }}
-              className="flex w-full touch-manipulation flex-col gap-4 rounded-3xl bg-white p-5 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+              className="flex h-full w-full touch-manipulation flex-col gap-4 rounded-3xl bg-white p-5 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
             >
               <span className="flex items-start justify-between gap-4">
-                <span className="min-w-0">
-                  <span className="block break-words font-display text-4xl uppercase leading-none tracking-wide">
+                <span className="flex min-w-0 flex-1 items-baseline gap-3">
+                  <span className="shrink-0 font-display text-4xl uppercase leading-none tracking-wide">
                     {cliente.codigo}
                   </span>
-                  {cliente.nombre ? (
-                    <span className="mt-2 block break-words text-sm">{cliente.nombre}</span>
-                  ) : null}
+                  <span className="min-w-0 truncate text-sm">{cliente.nombre ?? '\u00a0'}</span>
                 </span>
                 <EtiquetaEstado estado={cliente.estado} />
               </span>
