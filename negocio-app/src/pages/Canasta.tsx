@@ -1,7 +1,7 @@
-import { useEffect, useId, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { CampanaAbono } from '../components/CampanaAbono.tsx'
@@ -24,7 +24,15 @@ import { coincideCliente } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
 import { canastaAbiertaDesdeEstado, rutaAbonoDesdeCanasta } from '../lib/navegacion.ts'
-import { totalesCanastasAbiertas, totalesSemana, type GrupoDia, type GrupoPrecio } from '../lib/reglas.ts'
+import {
+  ORDENES_CANASTA,
+  ordenarCanastasAbiertas,
+  totalesCanastasAbiertas,
+  totalesSemana,
+  type GrupoDia,
+  type GrupoPrecio,
+  type OrdenCanasta,
+} from '../lib/reglas.ts'
 import {
   MENSAJE_CANASTA_VACIA,
   TIPOS_ENVIO,
@@ -118,6 +126,7 @@ export function Canasta() {
   const [selector, setSelector] = useState<Selector | null>(null)
   const [enviandoId, setEnviandoId] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
+  const [orden, setOrden] = useState<OrdenCanasta>('codigo')
 
   useEffect(() => {
     montado.current = true
@@ -275,8 +284,13 @@ export function Canasta() {
 
   const ocupado = enviandoId !== null
   const resumenAbiertas = totalesCanastasAbiertas(canastas)
-  const canastasVisibles = canastas.filter((canasta) =>
-    coincideCliente(busqueda, canasta.codigo, canasta.nombre),
+  const canastasVisibles = useMemo(
+    () =>
+      ordenarCanastasAbiertas(
+        canastas.filter((canasta) => coincideCliente(busqueda, canasta.codigo, canasta.nombre)),
+        orden,
+      ),
+    [busqueda, canastas, orden],
   )
   const enviosVisibles = envios.filter((envio) => coincideCliente(busqueda, envio.codigo, null))
 
@@ -327,7 +341,12 @@ export function Canasta() {
           ) : null}
 
           {!cargando && !errorCanastas && canastas.length > 0 ? (
-            <BuscadorClientes valor={busqueda} onCambiar={setBusqueda} />
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <BuscadorClientes valor={busqueda} onCambiar={setBusqueda} />
+              </div>
+              <FiltroOrden acento={acento} orden={orden} onElegir={setOrden} />
+            </div>
           ) : null}
 
           {!cargando && !errorCanastas && canastas.length === 0 ? (
@@ -997,6 +1016,138 @@ function BuscadorClientes({
         className="rounded-full bg-white px-5 py-4 text-base shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
       />
     </div>
+  )
+}
+
+const opcionesOrden: Record<OrdenCanasta, { texto: string; detalle: string; icono: typeof ArrowDownAZ }> = {
+  codigo: { texto: 'A–Z', detalle: 'Por código', icono: ArrowDownAZ },
+  saldoMayor: { texto: 'Debe más', detalle: 'Saldo de mayor a menor', icono: ArrowDownWideNarrow },
+  saldoMenor: { texto: 'Debe menos', detalle: 'Saldo de menor a mayor', icono: ArrowUpNarrowWide },
+}
+
+function FiltroOrden({
+  acento,
+  orden,
+  onElegir,
+}: {
+  acento: string
+  orden: OrdenCanasta
+  onElegir: (orden: OrdenCanasta) => void
+}) {
+  const reducirMovimiento = useReducedMotion()
+  const listaId = useId()
+  const refBoton = useRef<HTMLButtonElement>(null)
+  const refLista = useRef<HTMLDivElement>(null)
+  const [abierto, setAbierto] = useState(false)
+  const salto = reducirMovimiento === true
+  const transicion = salto ? { duration: 0 } : transicionDesplegar
+  const actual = opcionesOrden[orden]
+  const IconoActual = actual.icono
+
+  useEffect(() => {
+    if (!abierto) return
+    function cerrarTecla(evento: KeyboardEvent) {
+      if (evento.key === 'Escape') setAbierto(false)
+    }
+    window.addEventListener('keydown', cerrarTecla)
+    return () => window.removeEventListener('keydown', cerrarTecla)
+  }, [abierto])
+
+  useEffect(() => {
+    if (!abierto) return
+    refLista.current?.querySelector('button')?.focus()
+  }, [abierto])
+
+  useEffect(() => {
+    if (!abierto) return
+    const boton = refBoton.current
+    return () => boton?.focus()
+  }, [abierto])
+
+  const lista = createPortal(
+    <AnimatePresence>
+      {abierto ? (
+        <motion.div
+          key="orden"
+          className="fixed inset-0 z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={listaId}
+          initial={salto ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={transicion}
+        >
+          <button
+            type="button"
+            aria-label="Cerrar orden"
+            onClick={() => setAbierto(false)}
+            className="absolute inset-0 bg-black/25"
+          />
+          <motion.div
+            ref={refLista}
+            role="listbox"
+            aria-labelledby={listaId}
+            initial={salto ? false : { opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 28 }}
+            transition={transicion}
+            className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-md flex-col gap-2 rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md"
+          >
+            <p id={listaId} className="px-2 pb-1 text-sm text-black/60">
+              Ordenar
+            </p>
+            {ORDENES_CANASTA.map((opcion) => {
+              const dato = opcionesOrden[opcion]
+              const Icono = dato.icono
+              const elegido = opcion === orden
+              return (
+                <button
+                  key={opcion}
+                  type="button"
+                  role="option"
+                  aria-selected={elegido}
+                  onClick={() => {
+                    onElegir(opcion)
+                    setAbierto(false)
+                  }}
+                  className="inline-flex min-h-14 w-full touch-manipulation items-center justify-start gap-3 rounded-full px-4 py-3 text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  style={{ backgroundColor: elegido ? acento : '#F5F0E8' }}
+                >
+                  <Icono className="size-5 shrink-0" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block leading-none">{dato.texto}</span>
+                    <span className="mt-1 block text-sm text-black/60">{dato.detalle}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
+    document.body,
+  )
+
+  return (
+    <>
+      <motion.button
+        ref={refBoton}
+        type="button"
+        aria-expanded={abierto}
+        aria-haspopup="dialog"
+        aria-label={`Orden ${actual.texto}. Abrir lista`}
+        onClick={() => setAbierto((valor) => !valor)}
+        whileTap={reducirMovimiento ? undefined : toque}
+        transition={{ duration: 0.15 }}
+        className="inline-flex h-14 shrink-0 touch-manipulation items-center gap-1.5 rounded-full bg-white px-3.5 text-sm shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+      >
+        <IconoActual className="size-4 shrink-0" aria-hidden />
+        <span className="whitespace-nowrap">{actual.texto}</span>
+        {abierto ? <ChevronUp aria-hidden size={16} /> : <ChevronDown aria-hidden size={16} />}
+      </motion.button>
+      {lista}
+    </>
   )
 }
 

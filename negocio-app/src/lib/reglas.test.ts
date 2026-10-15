@@ -6,6 +6,7 @@ import {
   excedenteAbono,
   fechaDiaLocal,
   mensajeAbonoRegistrado,
+  ordenarCanastasAbiertas,
   ordenarPorCanasta,
   saldoPendiente,
   saldoTrasEditarAbono,
@@ -214,7 +215,7 @@ describe('mensajeAbonoRegistrado', () => {
 })
 
 describe('ordenarPorCanasta', () => {
-  it('deja primero a quien más prendas tiene en la canasta', () => {
+  it('ordena alfabéticamente por código', () => {
     expect(
       ordenarPorCanasta([
         { codigo: 'B', prendas: 1 },
@@ -222,7 +223,27 @@ describe('ordenarPorCanasta', () => {
         { codigo: 'C', prendas: 5 },
         { codigo: 'D', prendas: 5 },
       ]).map((cliente) => cliente.codigo),
-    ).toEqual(['A', 'C', 'D', 'B'])
+    ).toEqual(['A', 'B', 'C', 'D'])
+  })
+})
+
+describe('ordenarCanastasAbiertas', () => {
+  const filas = [
+    { codigo: 'Z', saldo: 4 },
+    { codigo: 'A', saldo: 20 },
+    { codigo: 'M', saldo: 4 },
+  ]
+
+  it('ordena por código', () => {
+    expect(ordenarCanastasAbiertas(filas, 'codigo').map((fila) => fila.codigo)).toEqual(['A', 'M', 'Z'])
+  })
+
+  it('ordena por quien debe más y desempata por código', () => {
+    expect(ordenarCanastasAbiertas(filas, 'saldoMayor').map((fila) => fila.codigo)).toEqual(['A', 'M', 'Z'])
+  })
+
+  it('ordena por quien debe menos y desempata por código', () => {
+    expect(ordenarCanastasAbiertas(filas, 'saldoMenor').map((fila) => fila.codigo)).toEqual(['M', 'Z', 'A'])
   })
 })
 

@@ -128,12 +128,29 @@ export function puedeVender(estado: string): boolean {
   return estado === 'activo'
 }
 
-/** En todas las listas: primero quien más prendas tiene en la canasta. */
-export function ordenarPorCanasta<T extends { prendas: number; codigo: string }>(filas: T[]): T[] {
+/** En todas las listas de clientes: orden alfabético por código. */
+export function ordenarPorCanasta<T extends { codigo: string }>(filas: T[]): T[] {
+  return [...filas].sort((a, b) => compararCodigo(a.codigo, b.codigo))
+}
+
+export const ORDENES_CANASTA = ['codigo', 'saldoMayor', 'saldoMenor'] as const
+export type OrdenCanasta = (typeof ORDENES_CANASTA)[number]
+
+/** En Canasta: A–Z, quien debe más o quien debe menos. */
+export function ordenarCanastasAbiertas<T extends { codigo: string; saldo: number }>(
+  filas: T[],
+  orden: OrdenCanasta,
+): T[] {
   return [...filas].sort((a, b) => {
-    if (a.prendas !== b.prendas) return b.prendas - a.prendas
-    return a.codigo.localeCompare(b.codigo, 'es', { sensitivity: 'base' })
+    if (orden !== 'codigo' && a.saldo !== b.saldo) {
+      return orden === 'saldoMayor' ? b.saldo - a.saldo : a.saldo - b.saldo
+    }
+    return compararCodigo(a.codigo, b.codigo)
   })
+}
+
+function compararCodigo(a: string, b: string): number {
+  return a.localeCompare(b, 'es', { sensitivity: 'base' })
 }
 
 /** Suma el dinero y las prendas de los envíos que siguen en la semana. */
