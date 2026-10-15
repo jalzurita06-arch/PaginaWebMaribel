@@ -51,10 +51,30 @@ const boton =
 
 const toque = { scale: 0.97 }
 const Enlace = motion.create(Link)
+const consultaPc = '(min-width: 980px)'
+
+function usePantallaPc() {
+  const [esPc, setEsPc] = useState(() => window.matchMedia(consultaPc).matches)
+
+  useEffect(() => {
+    const media = window.matchMedia(consultaPc)
+    const alCambiar = () => setEsPc(media.matches)
+    media.addEventListener('change', alCambiar)
+    return () => media.removeEventListener('change', alCambiar)
+  }, [])
+
+  return esPc
+}
+
+function textoPrendas(prendas: number) {
+  if (prendas <= 0) return null
+  return prendas === 1 ? '1 prenda pedida' : `${prendas} prendas pedidas`
+}
 
 export function Venta() {
   const { nombre, subtitulo, acento } = secciones.venta
   const { enLinea } = useConexion()
+  const esPc = usePantallaPc()
   const reducirMovimiento = useReducedMotion()
   const refPaso = useRef<HTMLHeadingElement>(null)
   const eligiendo = useRef(false)
@@ -310,6 +330,8 @@ export function Venta() {
               cargando={cargandoClientes}
               error={errorBusqueda}
               revisandoId={null}
+              esPc={esPc}
+              acento={acento}
               onBusqueda={(valor) => {
                 setBusqueda(valor)
                 setBloqueo(null)
@@ -390,6 +412,8 @@ function PasoBuscar({
   cargando,
   error,
   revisandoId,
+  esPc,
+  acento,
   onBusqueda,
   onBuscarYa,
   onElegir,
@@ -401,6 +425,8 @@ function PasoBuscar({
   cargando: boolean
   error: string | null
   revisandoId: string | null
+  esPc: boolean
+  acento: string
   onBusqueda: (valor: string) => void
   onBuscarYa: () => void
   onElegir: (cliente: Cliente) => void
@@ -445,45 +471,118 @@ function PasoBuscar({
       ) : null}
 
       {sinResultados ? (
-        <p className="rounded-3xl bg-white px-5 py-8 text-center shadow-sm">
+        <p className={esPc ? 'text-base' : 'rounded-3xl bg-white px-5 py-8 text-center shadow-sm'}>
           {consulta ? 'Ningún cliente coincide con la búsqueda.' : 'Aún no hay clientes'}
         </p>
       ) : null}
 
-      <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
-        {clientes.map((cliente) => (
-          <li key={cliente.id} className="h-full">
-            <motion.button
-              type="button"
-              onClick={() => onElegir(cliente)}
-              disabled={revisandoId !== null}
-              whileTap={reducirMovimiento || revisandoId !== null ? undefined : toque}
-              transition={{ duration: 0.15 }}
-              className="flex h-full min-h-[7.5rem] w-full touch-manipulation items-start justify-between gap-4 rounded-3xl bg-white p-5 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="flex items-baseline gap-3">
-                  <span className="shrink-0 font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
+      {clientes.length > 0 && esPc ? (
+        <TablaClientesVenta
+          clientes={clientes}
+          acento={acento}
+          revisandoId={revisandoId}
+          onElegir={onElegir}
+        />
+      ) : null}
+
+      {clientes.length > 0 && !esPc ? (
+        <ul className="flex flex-col gap-2">
+          {clientes.map((cliente) => {
+            const prendas = textoPrendas(cliente.prendas)
+            return (
+              <li key={cliente.id}>
+                <motion.button
+                  type="button"
+                  onClick={() => onElegir(cliente)}
+                  disabled={revisandoId !== null}
+                  whileTap={reducirMovimiento || revisandoId !== null ? undefined : toque}
+                  transition={{ duration: 0.15 }}
+                  className="flex w-full touch-manipulation items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline gap-2">
+                      <span className="shrink-0 font-display text-2xl uppercase leading-none tracking-wide">
+                        {cliente.codigo}
+                      </span>
+                      <span className="min-w-0 truncate text-sm">{cliente.nombre ?? '\u00a0'}</span>
+                    </span>
+                    {prendas ? <span className="mt-1 block text-sm text-black/60">{prendas}</span> : null}
+                    {revisandoId === cliente.id ? <span className="mt-1 block text-sm">Revisando…</span> : null}
+                  </span>
+                  <EtiquetaEstado estado={cliente.estado} />
+                </motion.button>
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+function TablaClientesVenta({
+  clientes,
+  acento,
+  revisandoId,
+  onElegir,
+}: {
+  clientes: ClienteVenta[]
+  acento: string
+  revisandoId: string | null
+  onElegir: (cliente: Cliente) => void
+}) {
+  return (
+    <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left lg:[&_td]:px-5 lg:[&_td]:py-4 lg:[&_th]:px-5 lg:[&_th]:py-4">
+          <caption className="sr-only">Clientes</caption>
+          <thead>
+            <tr className="text-sm" style={{ backgroundColor: acento }}>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Código
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Nombre
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Prendas
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Estado
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {clientes.map((cliente) => (
+              <tr
+                key={cliente.id}
+                className="cursor-pointer border-b border-black/10 hover:bg-black/[0.03]"
+                onClick={() => {
+                  if (revisandoId !== null) return
+                  onElegir(cliente)
+                }}
+              >
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    disabled={revisandoId !== null}
+                    onClick={() => onElegir(cliente)}
+                    className="break-words text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+                  >
                     {cliente.codigo}
-                  </span>
-                  <span className="min-w-0 truncate text-sm">
-                    {cliente.nombre ?? '\u00a0'}
-                  </span>
-                </span>
-                <span className="mt-2 block min-h-5 text-sm text-black/60">
-                  {cliente.prendas > 0
-                    ? cliente.prendas === 1
-                      ? '1 prenda pedida'
-                      : `${cliente.prendas} prendas pedidas`
-                    : '\u00a0'}
-                </span>
-                {revisandoId === cliente.id ? <span className="mt-2 block text-sm">Revisando…</span> : null}
-              </span>
-              <EtiquetaEstado estado={cliente.estado} />
-            </motion.button>
-          </li>
-        ))}
-      </ul>
+                  </button>
+                </td>
+                <td className="px-4 py-3">{cliente.nombre ?? 'Sin nombre'}</td>
+                <td className="px-4 py-3 text-black/70">{textoPrendas(cliente.prendas) ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <EtiquetaEstado estado={cliente.estado} />
+                  {revisandoId === cliente.id ? <span className="mt-1 block text-sm">Revisando…</span> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
