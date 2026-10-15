@@ -30,6 +30,7 @@ export type TipoEnvio = (typeof TIPOS_ENVIO)[number]
 export type CanastaAbierta = {
   clienteId: string
   codigo: string
+  nombre: string | null
   saldoFavor: number
   prendas: number
   total: number
@@ -44,6 +45,7 @@ export type EnvioSemana = {
   tipo: string
   prendas: number
   total: number
+  detalle: GrupoPrecio[]
 }
 
 export type EnvioRegistrado = {
@@ -57,6 +59,7 @@ type ErrorDatos = { code?: string; message?: string }
 type FilaAgrupable = {
   clienteId: string
   codigo: string
+  nombre: string | null
   saldoFavor: number
   precio: number
   cantidad: number
@@ -155,12 +158,16 @@ export function armarRegistroEnvio(
 }
 
 export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[] {
-  const porCliente = new Map<string, { codigo: string; saldoFavor: number; items: ItemCanasta[] }>()
+  const porCliente = new Map<
+    string,
+    { codigo: string; nombre: string | null; saldoFavor: number; items: ItemCanasta[] }
+  >()
 
   for (const fila of filas) {
     if (!(fila.cantidad > 0)) continue
     const actual = porCliente.get(fila.clienteId) ?? {
       codigo: fila.codigo,
+      nombre: fila.nombre,
       saldoFavor: fila.saldoFavor,
       items: [],
     }
@@ -175,6 +182,7 @@ export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[
       return {
         clienteId,
         codigo: datos.codigo,
+        nombre: datos.nombre,
         saldoFavor: redondear2(Math.max(0, datos.saldoFavor)),
         prendas: totalPrendas(grupos),
         total,
@@ -193,7 +201,7 @@ export async function listarCanastasAbiertas(): Promise<Resultado<CanastaAbierta
   try {
     const { data, error } = await db
       .from('canasta_items')
-      .select('precio, cantidad, clientes(id, codigo, saldo_favor)')
+      .select('precio, cantidad, clientes(id, codigo, nombre, saldo_favor)')
 
     if (error) return { ok: false, mensaje: mensajeErrorEnvio(error, 'cargar las canastas') }
     const filas = leerFilasCanasta(data)
@@ -276,7 +284,7 @@ export async function registrarEnvio(
         total_prendas: registro.datos.prendas,
         detalle: registro.datos.detalle,
       })
-      .select('id, fecha, codigo_cliente, tipo_envio, total, total_prendas')
+      .select('id, fecha, codigo_cliente, tipo_envio, total, total_prendas, detalle')
       .single()
 
     if (errorEnvio || !creado) {
@@ -297,6 +305,7 @@ export async function registrarEnvio(
       tipo,
       prendas: registro.datos.prendas,
       total: registro.datos.total,
+      detalle: registro.datos.detalle,
     }
 
     return {
@@ -326,7 +335,7 @@ export async function listarEnviosSemana(): Promise<Resultado<EnvioSemana[]>> {
   try {
     const { data, error } = await db
       .from('envios')
-      .select('id, fecha, codigo_cliente, tipo_envio, total, total_prendas')
+      .select('id, fecha, codigo_cliente, tipo_envio, total, total_prendas, detalle')
       .gte('fecha', corte)
       .order('fecha', { ascending: false })
 
@@ -447,6 +456,7 @@ function leerFilasCanasta(data: unknown): FilaAgrupable[] | null {
     filas.push({
       clienteId: cliente.id,
       codigo: cliente.codigo,
+      nombre: cliente.nombre,
       saldoFavor: cliente.saldoFavor,
       precio: redondear2(precio),
       cantidad,
@@ -458,15 +468,19 @@ function leerFilasCanasta(data: unknown): FilaAgrupable[] | null {
 
 function clienteEmbebido(
   valor: unknown,
-): { id: string; codigo: string; saldoFavor: number } | null | 'invalido' {
+): { id: string; codigo: string; nombre: string | null; saldoFavor: number } | null | 'invalido' {
   const fila = Array.isArray(valor) ? valor[0] : valor
   if (fila == null) return null
   if (typeof fila !== 'object') return 'invalido'
   const datos = fila as Record<string, unknown>
   if (typeof datos.id !== 'string' || typeof datos.codigo !== 'string') return 'invalido'
+  if (!(datos.nombre === null || datos.nombre === undefined || typeof datos.nombre === 'string')) {
+    return 'invalido'
+  }
   const saldo = Number(datos.saldo_favor)
   if (!Number.isFinite(saldo)) return 'invalido'
-  return { id: datos.id, codigo: datos.codigo, saldoFavor: redondear2(Math.max(0, saldo)) }
+  const nombre = typeof datos.nombre === 'string' && datos.nombre.trim() ? datos.nombre.trim() : null
+  return { id: datos.id, codigo: datos.codigo, nombre, saldoFavor: redondear2(Math.max(0, saldo)) }
 }
 
 function leerClienteEnvio(valor: unknown): ClienteEnvio | null {
@@ -535,7 +549,28 @@ function leerEnvio(valor: unknown): EnvioSemana | null {
     tipo: fila.tipo_envio,
     prendas,
     total: redondear2(Math.max(0, total)),
+    detalle: leerDetalleEnvio(fila.detalle),
   }
+}
+
+/** El detalle guardado es la lista de precio, cantidad y subtotal. Si falta, la venta se abre vacía. */
+export function leerDetalleEnvio(valor: unknown): GrupoPrecio[] {
+  if (!Array.isArray(valor)) return []
+  const grupos: GrupoPrecio[] = []
+  for (const fila of valor) {
+    if (typeof fila !== 'object' || fila === null) continue
+    const datos = fila as Record<string, unknown>
+    const precio = Number(datos.precio)
+    const cantidad = Number(datos.cantidad)
+    if (!Number.isFinite(precio) || !Number.isFinite(cantidad) || cantidad <= 0) continue
+    const subtotal = Number(datos.subtotal)
+    grupos.push({
+      precio: redondear2(precio),
+      cantidad,
+      subtotal: Number.isFinite(subtotal) ? redondear2(Math.max(0, subtotal)) : redondear2(precio * cantidad),
+    })
+  }
+  return grupos
 }
 
 function leerFecha(valor: unknown): string | null {

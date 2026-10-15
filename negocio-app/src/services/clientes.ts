@@ -1,7 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DatosNuevoCliente } from '../lib/clienteFormulario.ts'
 import { redondear2 } from '../lib/dinero.ts'
-import { saldoPendiente, saldoTrasEditarAbono, sumarAbono, totalCanasta } from '../lib/reglas.ts'
+import {
+  ordenarClientesVenta,
+  saldoPendiente,
+  saldoTrasEditarAbono,
+  sumarAbono,
+  totalCanasta,
+} from '../lib/reglas.ts'
 import { supabase } from '../lib/supabase.ts'
 
 export type EstadoCliente = 'activo' | 'inactivo'
@@ -20,6 +26,8 @@ export type PrendaCanasta = {
   precio: number
   cantidad: number
 }
+
+export type ClienteVenta = Cliente & { prendas: number }
 
 export type Resultado<T> = { ok: true; datos: T } | { ok: false; mensaje: string }
 
@@ -66,6 +74,28 @@ export async function listarClientes(busqueda?: string): Promise<Resultado<Clien
     const clientes = leerClientes(data)
     if (!clientes) return { ok: false, mensaje: 'No se pudo leer la lista de clientes.' }
     return { ok: true, datos: clientes }
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
+  }
+}
+
+/** Lista para Venta: incluye cuántas prendas tiene pedidas cada clienta. */
+export async function listarClientesVenta(busqueda?: string): Promise<Resultado<ClienteVenta[]>> {
+  const db = preparar()
+  if (esFallo(db)) return db
+
+  const termino = busqueda?.trim() ?? ''
+  const base = db.from('clientes').select(`${COLUMNAS}, canasta_items(cantidad)`)
+  const consulta = termino
+    ? base.or(`codigo.ilike."%${escaparFiltro(termino)}%",nombre.ilike."%${escaparFiltro(termino)}%"`)
+    : base
+
+  try {
+    const { data, error } = await consulta.order('codigo', { ascending: true })
+    if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
+    const clientes = leerClientesVenta(data)
+    if (!clientes) return { ok: false, mensaje: 'No se pudo leer la lista de clientes.' }
+    return { ok: true, datos: ordenarClientesVenta(clientes) }
   } catch (error) {
     return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
   }
@@ -606,6 +636,32 @@ async function filaAbono(
     return { ok: false, mensaje: 'No se encontró el abono.' }
   }
   return { ok: true, datos: { abono, montoCrudo, fechaCruda } }
+}
+
+function leerClientesVenta(data: unknown): ClienteVenta[] | null {
+  if (!Array.isArray(data)) return null
+  const clientes: ClienteVenta[] = []
+  for (const fila of data) {
+    const cliente = leerCliente(fila)
+    if (!cliente || typeof fila !== 'object' || fila === null) return null
+    const prendas = leerCantidadPrendas((fila as Record<string, unknown>).canasta_items)
+    if (prendas == null) return null
+    clientes.push({ ...cliente, prendas })
+  }
+  return clientes
+}
+
+function leerCantidadPrendas(valor: unknown): number | null {
+  if (valor == null) return 0
+  if (!Array.isArray(valor)) return null
+  let prendas = 0
+  for (const fila of valor) {
+    if (typeof fila !== 'object' || fila === null) return null
+    const cantidad = Number((fila as Record<string, unknown>).cantidad)
+    if (!Number.isFinite(cantidad)) return null
+    if (cantidad > 0) prendas += cantidad
+  }
+  return prendas
 }
 
 function leerResumenes(data: unknown): ResumenClienteAbono[] | null {

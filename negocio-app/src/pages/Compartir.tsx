@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
@@ -33,7 +34,14 @@ type AvisoEstado = { texto: string; tono: 'ok' | 'error' }
 export function Compartir() {
   const { clienteId = '' } = useParams()
   const [parametros] = useSearchParams()
+  const ubicacion = useLocation()
+  const navigate = useNavigate()
   const textoVenta = parametros.get('venta')
+  const desdeConsulta = parametros.get('desde')
+  const desdeEstado =
+    ubicacion.state && typeof ubicacion.state === 'object' && 'desde' in ubicacion.state
+      ? (ubicacion.state as { desde?: unknown }).desde
+      : null
   const { acento } = secciones.canasta
   const reducirMovimiento = useReducedMotion()
   const [cliente, setCliente] = useState<Cliente | null>(null)
@@ -99,6 +107,11 @@ export function Compartir() {
   const telefono = cliente ? telefonoConPrefijo(cliente.telefono, negocio.telefonoPrefijo) : ''
   const bancoListo = datosBancariosListos(negocio)
   const listo = Boolean(cliente && resumen && !error && !cargando && telefono && bancoListo)
+  const vuelveAVenta = esVenta || desdeConsulta === 'venta' || desdeEstado === 'venta'
+
+  function regresar() {
+    navigate(vuelveAVenta ? '/venta' : '/canasta')
+  }
 
   async function compartir() {
     if (!cliente || ocupado) return
@@ -131,6 +144,16 @@ export function Compartir() {
 
   return (
     <Layout titulo="Compartir" subtitulo={esVenta ? 'Esta venta' : 'Canasta completa'} acento={acento}>
+      <motion.button
+        type="button"
+        onClick={regresar}
+        whileTap={reducirMovimiento ? undefined : toque}
+        transition={{ duration: 0.15 }}
+        className={`${boton} gap-2 bg-black/5 lg:w-auto lg:self-start lg:px-6`}
+      >
+        <ArrowLeft aria-hidden size={18} strokeWidth={2} />
+        Regresar
+      </motion.button>
       {error ? <Aviso>{error}</Aviso> : null}
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
       {cargando && !cliente ? <IndicadorCarga>Cargando cliente…</IndicadorCarga> : null}

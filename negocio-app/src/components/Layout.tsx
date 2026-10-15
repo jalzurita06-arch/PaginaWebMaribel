@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { cerrarSesion } from '../services/sesion.ts'
 import { Aviso } from './Aviso.tsx'
 
@@ -83,10 +83,19 @@ function EspacioLogo({ acento }: { acento: string }) {
   )
 }
 
+function destinoVolver(pathname: string, busqueda: URLSearchParams): string {
+  if (!pathname.startsWith('/compartir')) return '/'
+  if (busqueda.get('venta') != null || busqueda.get('desde') === 'venta') return '/venta'
+  return '/canasta'
+}
+
 function BotonVolver({ reducirMovimiento }: { reducirMovimiento: boolean | null }) {
+  const { pathname } = useLocation()
+  const [busqueda] = useSearchParams()
+
   return (
     <Enlace
-      to="/"
+      to={destinoVolver(pathname, busqueda)}
       whileTap={reducirMovimiento ? undefined : toque}
       transition={{ duration: 0.15 }}
       className="inline-flex min-h-11 touch-manipulation items-center gap-2 rounded-full bg-black/5 px-4 text-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"

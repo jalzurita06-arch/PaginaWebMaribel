@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Minus, Plus } from 'lucide-react'
+import { Minus, Plus, Shirt, ShoppingBasket } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { EtiquetaEstado } from '../components/EtiquetaEstado.tsx'
@@ -10,8 +10,9 @@ import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { codificarVenta } from '../lib/compartir.ts'
-import { formatearDolares } from '../lib/dinero.ts'
+import { formatearDolares, redondear2 } from '../lib/dinero.ts'
 import { agruparPorPrecio, puedeVender, totalCanasta, type GrupoPrecio, type ItemCanasta } from '../lib/reglas.ts'
+import { borrarMenuVenta, guardarMenuVenta, leerMenuVenta } from '../lib/ventaConfirmada.ts'
 import {
   agregarItemsCanasta,
   leerCantidadEntera,
@@ -20,7 +21,7 @@ import {
   obtenerCanasta,
   type FilaCanasta,
 } from '../services/canasta.ts'
-import { listarClientes, obtenerCliente, type Cliente } from '../services/clientes.ts'
+import { listarClientesVenta, obtenerCliente, type Cliente, type ClienteVenta } from '../services/clientes.ts'
 import { listarPrecios, type Precio } from '../services/precios.ts'
 
 type Paso = 'buscar' | 'prendas' | 'resumen' | 'confirmado'
@@ -63,7 +64,7 @@ export function Venta() {
   const [busqueda, setBusqueda] = useState('')
   const [consulta, setConsulta] = useState('')
   const [recargaClientes, setRecargaClientes] = useState(0)
-  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [clientes, setClientes] = useState<ClienteVenta[]>([])
   const [cargandoClientes, setCargandoClientes] = useState(true)
   const [revisandoId, setRevisandoId] = useState<string | null>(null)
   const [cliente, setCliente] = useState<Cliente | null>(null)
@@ -79,6 +80,7 @@ export function Venta() {
   const [cargandoCanasta, setCargandoCanasta] = useState(false)
   const [errorCanasta, setErrorCanasta] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
+  const [restaurando, setRestaurando] = useState(() => leerMenuVenta() != null)
 
   useEffect(() => {
     const tiempo = window.setTimeout(() => setConsulta(busqueda.trim()), 250)
@@ -86,11 +88,36 @@ export function Venta() {
   }, [busqueda])
 
   useEffect(() => {
+    const guardada = leerMenuVenta()
+    if (!guardada) {
+      setRestaurando(false)
+      return
+    }
+    let vigente = true
+    void (async () => {
+      const resultado = await obtenerCliente(guardada.clienteId)
+      if (!vigente) return
+      if (!resultado.ok) {
+        borrarMenuVenta()
+        setRestaurando(false)
+        return
+      }
+      setCliente(resultado.datos)
+      setVentaConfirmada(guardada.venta)
+      setPaso('confirmado')
+      setRestaurando(false)
+    })()
+    return () => {
+      vigente = false
+    }
+  }, [])
+
+  useEffect(() => {
     let vigente = true
     void (async () => {
       setCargandoClientes(true)
       setErrorBusqueda(null)
-      const resultado = await listarClientes(consulta)
+      const resultado = await listarClientesVenta(consulta)
       if (!vigente) return
       setCargandoClientes(false)
       if (!resultado.ok) {
@@ -165,10 +192,18 @@ export function Venta() {
     if (precioElegido == null) return
     const cantidad = leerCantidadEntera(textoCantidad)
     if (cantidad == null) return
-    setLineas((actuales) => [
-      ...actuales,
-      { id: crypto.randomUUID(), precio: precioElegido, cantidad },
-    ])
+    const precio = redondear2(precioElegido)
+    setLineas((actuales) => {
+      const existente = actuales.find((linea) => redondear2(linea.precio) === precio)
+      if (!existente) {
+        return [...actuales, { id: crypto.randomUUID(), precio, cantidad }]
+      }
+      const siguiente = existente.cantidad + cantidad
+      if (!Number.isSafeInteger(siguiente)) return actuales
+      return actuales.map((linea) =>
+        linea.id === existente.id ? { ...linea, cantidad: siguiente } : linea,
+      )
+    })
     setTextoCantidad('')
   }
 
@@ -228,7 +263,9 @@ export function Venta() {
       mostrar(resultado.mensaje, 'error')
       return
     }
-    setVentaConfirmada(lineas.map((linea) => ({ precio: linea.precio, cantidad: linea.cantidad })))
+    const venta = lineas.map((linea) => ({ precio: linea.precio, cantidad: linea.cantidad }))
+    guardarMenuVenta(cliente.id, venta)
+    setVentaConfirmada(venta)
     setLineas([])
     setPrecioElegido(null)
     setTextoCantidad('')
@@ -236,6 +273,7 @@ export function Venta() {
   }
 
   function registrarOtraVenta() {
+    borrarMenuVenta()
     setAviso(null)
     setBloqueo(null)
     setCliente(null)
@@ -264,8 +302,10 @@ export function Venta() {
   return (
     <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
-      {paso === 'buscar' && bloqueo ? <Aviso>{bloqueo}</Aviso> : null}
+      {paso === 'buscar' && !restaurando && bloqueo ? <Aviso>{bloqueo}</Aviso> : null}
+      {restaurando ? <IndicadorCarga>Cargando el pedido…</IndicadorCarga> : null}
 
+      {restaurando ? null : (
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={paso}
@@ -359,12 +399,12 @@ export function Venta() {
             <PasoConfirmado
               cliente={cliente}
               venta={ventaConfirmada}
-              acento={acento}
               onOtraVenta={registrarOtraVenta}
             />
           ) : null}
         </motion.div>
       </AnimatePresence>
+      )}
     </Layout>
   )
 }
@@ -383,7 +423,7 @@ function PasoBuscar({
 }: {
   busqueda: string
   consulta: string
-  clientes: Cliente[]
+  clientes: ClienteVenta[]
   cargando: boolean
   error: string | null
   revisandoId: string | null
@@ -453,6 +493,11 @@ function PasoBuscar({
                 </span>
                 {cliente.nombre ? (
                   <span className="mt-2 block break-words text-sm">{cliente.nombre}</span>
+                ) : null}
+                {cliente.prendas > 0 ? (
+                  <span className="mt-2 block text-sm text-black/60">
+                    {cliente.prendas === 1 ? '1 prenda pedida' : `${cliente.prendas} prendas pedidas`}
+                  </span>
                 ) : null}
                 {revisandoId === cliente.id ? <span className="mt-2 block text-sm">Revisando…</span> : null}
               </span>
@@ -776,12 +821,10 @@ function PasoResumen({
 function PasoConfirmado({
   cliente,
   venta,
-  acento,
   onOtraVenta,
 }: {
   cliente: Cliente
   venta: ItemCanasta[]
-  acento: string
   onOtraVenta: () => void
 }) {
   const reducirMovimiento = useReducedMotion()
@@ -793,20 +836,23 @@ function PasoConfirmado({
       {venta.length > 0 ? (
         <Enlace
           to={rutaVenta}
+          state={{ desde: 'venta' }}
           whileTap={reducirMovimiento ? undefined : toque}
           transition={{ duration: 0.15 }}
-          className={`${boton} bg-black text-white`}
+          className={`${boton} gap-2 bg-black text-white`}
         >
+          <Shirt aria-hidden size={18} strokeWidth={2} />
           Compartir esta venta
         </Enlace>
       ) : null}
       <Enlace
-        to={`/compartir/${cliente.id}`}
+        to={`/compartir/${cliente.id}?desde=venta`}
+        state={{ desde: 'venta' }}
         whileTap={reducirMovimiento ? undefined : toque}
         transition={{ duration: 0.15 }}
-        className={`${boton} ${venta.length > 0 ? '' : 'bg-black text-white'}`}
-        style={venta.length > 0 ? { backgroundColor: acento } : undefined}
+        className={`${boton} gap-2 bg-black text-white`}
       >
+        <ShoppingBasket aria-hidden size={18} strokeWidth={2} />
         Compartir total
       </Enlace>
       <motion.button
@@ -820,6 +866,7 @@ function PasoConfirmado({
       </motion.button>
       <Enlace
         to="/"
+        onClick={() => borrarMenuVenta()}
         whileTap={reducirMovimiento ? undefined : toque}
         transition={{ duration: 0.15 }}
         className={`${boton} bg-black/5`}

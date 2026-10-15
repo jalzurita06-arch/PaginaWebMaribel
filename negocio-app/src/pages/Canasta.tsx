@@ -7,6 +7,7 @@ import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
+import { coincideCliente, sugerirClientes } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
 import { totalesCanastasAbiertas, totalesSemana, type GrupoPrecio } from '../lib/reglas.ts'
@@ -79,6 +80,8 @@ export function Canasta() {
   const [abiertaId, setAbiertaId] = useState<string | null>(null)
   const [selector, setSelector] = useState<Selector | null>(null)
   const [enviandoId, setEnviandoId] = useState<string | null>(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [envioAbiertoId, setEnvioAbiertoId] = useState<string | null>(null)
 
   useEffect(() => {
     montado.current = true
@@ -177,6 +180,44 @@ export function Canasta() {
 
   const ocupado = enviandoId !== null
   const resumenAbiertas = totalesCanastasAbiertas(canastas)
+  const canastasVisibles = canastas.filter((canasta) =>
+    coincideCliente(busqueda, canasta.codigo, canasta.nombre),
+  )
+  const enviosVisibles = envios.filter((envio) => coincideCliente(busqueda, envio.codigo, null))
+  const sugerenciasCanasta = sugerirClientes(
+    busqueda,
+    canastas.map((canasta) => ({
+      id: canasta.clienteId,
+      codigo: canasta.codigo,
+      nombre: canasta.nombre,
+    })),
+  )
+  const sugerenciasHistorial = sugerirClientes(
+    busqueda,
+    envios.map((envio) => ({ id: envio.id, codigo: envio.codigo, nombre: null })),
+  )
+
+  function irACanasta(canasta: CanastaAbierta) {
+    setBusqueda(canasta.codigo)
+    setAbiertaId(canasta.clienteId)
+    window.setTimeout(() => {
+      document.getElementById(`canasta-${canasta.clienteId}`)?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    }, 50)
+  }
+
+  function irAEnvio(id: string, codigo: string) {
+    setBusqueda(codigo)
+    setEnvioAbiertoId(id)
+    window.setTimeout(() => {
+      document.getElementById(`envio-${id}`)?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    }, 50)
+  }
 
   function irA(destino: VistaCanasta) {
     setVista(destino)
@@ -220,15 +261,33 @@ export function Canasta() {
             />
           ) : null}
 
+          {!cargando && !errorCanastas && canastas.length > 0 ? (
+            <BuscadorClientes
+              valor={busqueda}
+              sugerencias={sugerenciasCanasta}
+              onCambiar={setBusqueda}
+              onElegir={(opcion) => {
+                const canasta = canastas.find((fila) => fila.clienteId === opcion.id)
+                if (canasta) irACanasta(canasta)
+              }}
+            />
+          ) : null}
+
           {!cargando && !errorCanastas && canastas.length === 0 ? (
             <p className={esPc ? 'text-base' : 'rounded-3xl bg-white px-5 py-8 text-center shadow-sm'}>
               No hay canastas abiertas.
             </p>
           ) : null}
 
-          {canastas.length > 0 && esPc ? (
+          {!cargando && !errorCanastas && canastas.length > 0 && canastasVisibles.length === 0 ? (
+            <p className={esPc ? 'text-base' : 'rounded-3xl bg-white px-5 py-8 text-center shadow-sm'}>
+              Ninguna canasta coincide con la búsqueda.
+            </p>
+          ) : null}
+
+          {canastasVisibles.length > 0 && esPc ? (
             <TablaCanastas
-              canastas={canastas}
+              canastas={canastasVisibles}
               acento={acento}
               abiertaId={abiertaId}
               selector={selector}
@@ -245,9 +304,9 @@ export function Canasta() {
             />
           ) : null}
 
-          {canastas.length > 0 && !esPc ? (
+          {canastasVisibles.length > 0 && !esPc ? (
             <ul className="flex flex-col gap-3">
-              {canastas.map((canasta) => (
+              {canastasVisibles.map((canasta) => (
                 <FilaCanasta
                   key={canasta.clienteId}
                   canasta={canasta}
@@ -288,9 +347,19 @@ export function Canasta() {
           >
             Canastas abiertas
           </motion.button>
+          {!cargando && !errorHistorial && envios.length > 0 ? (
+            <BuscadorClientes
+              valor={busqueda}
+              sugerencias={sugerenciasHistorial}
+              onCambiar={setBusqueda}
+              onElegir={(opcion) => irAEnvio(opcion.id, opcion.codigo)}
+            />
+          ) : null}
           <HistorialSemana
             acento={acento}
-            envios={envios}
+            envios={enviosVisibles}
+            todos={envios}
+            destacadoId={envioAbiertoId}
             error={errorHistorial}
             cargando={cargando}
             esPc={esPc}
@@ -376,7 +445,7 @@ function FilaCanasta({
   const detalleId = useId()
 
   return (
-    <li className="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm">
+    <li id={`canasta-${canasta.clienteId}`} className="flex scroll-mt-4 flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm">
       <button
         type="button"
         aria-expanded={abierta}
@@ -385,8 +454,13 @@ function FilaCanasta({
         className="touch-manipulation text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
       >
         <span className="flex items-start justify-between gap-3">
-          <span className="min-w-0 break-words font-display text-4xl uppercase leading-none tracking-wide">
-            {canasta.codigo}
+          <span className="min-w-0">
+            <span className="block break-words font-display text-4xl uppercase leading-none tracking-wide">
+              {canasta.codigo}
+            </span>
+            {canasta.nombre ? (
+              <span className="mt-2 block break-words text-sm">{canasta.nombre}</span>
+            ) : null}
           </span>
           <span className="shrink-0 pt-1 text-xl font-bold leading-none">{textoCantidad(canasta.prendas)}</span>
         </span>
@@ -536,7 +610,8 @@ function FilasTabla({
   return (
     <>
       <tr
-        className={`border-b border-black/10 align-top ${abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
+        id={`canasta-${canasta.clienteId}`}
+        className={`scroll-mt-4 border-b border-black/10 align-top ${abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
         onClick={alternarSiEsDato}
       >
         <td className="px-4 py-3">
@@ -549,6 +624,7 @@ function FilasTabla({
           >
             {canasta.codigo}
           </button>
+          {canasta.nombre ? <p className="mt-1 text-sm">{canasta.nombre}</p> : null}
         </td>
         <td className="px-4 py-3 text-right text-xl font-bold tabular-nums leading-none">
           {canasta.prendas}
@@ -642,6 +718,7 @@ function AccionesCanasta({
       <div className={compacto ? 'contents' : 'grid grid-cols-2 gap-3'}>
         <Enlace
           to={`/compartir/${canasta.clienteId}`}
+          state={{ desde: 'canasta' }}
           aria-disabled={bloqueada || undefined}
           tabIndex={bloqueada ? -1 : undefined}
           onClick={(evento) => {
@@ -685,6 +762,80 @@ function AccionesCanasta({
           onCancelar={onCerrarSelector}
         />
       </div>
+    </div>
+  )
+}
+
+type OpcionBusqueda = { id: string; codigo: string; nombre: string | null }
+
+function BuscadorClientes({
+  valor,
+  sugerencias,
+  onCambiar,
+  onElegir,
+}: {
+  valor: string
+  sugerencias: OpcionBusqueda[]
+  onCambiar: (valor: string) => void
+  onElegir: (opcion: OpcionBusqueda) => void
+}) {
+  const idBusqueda = useId()
+  const idLista = useId()
+  const [abierta, setAbierta] = useState(false)
+  const mostrar = abierta && valor.trim() !== '' && sugerencias.length > 0
+
+  return (
+    <div className="relative flex flex-col gap-2">
+      <label className="text-sm" htmlFor={idBusqueda}>
+        Buscar
+      </label>
+      <input
+        id={idBusqueda}
+        type="search"
+        role="combobox"
+        aria-expanded={mostrar}
+        aria-controls={idLista}
+        aria-autocomplete="list"
+        enterKeyHint="search"
+        value={valor}
+        placeholder="Código o nombre"
+        onChange={(evento) => {
+          onCambiar(evento.target.value)
+          setAbierta(true)
+        }}
+        onFocus={() => setAbierta(true)}
+        onBlur={() => window.setTimeout(() => setAbierta(false), 120)}
+        onKeyDown={(evento) => {
+          if (evento.key === 'Escape') setAbierta(false)
+        }}
+        className="rounded-full bg-white px-5 py-4 text-base shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+      />
+      {mostrar ? (
+        <ul
+          id={idLista}
+          role="listbox"
+          className="absolute top-full z-10 mt-2 flex w-full flex-col overflow-hidden rounded-3xl bg-white py-2 shadow-md"
+        >
+          {sugerencias.map((opcion) => (
+            <li key={opcion.id} role="option" aria-selected={false}>
+              <button
+                type="button"
+                onMouseDown={(evento) => evento.preventDefault()}
+                onClick={() => {
+                  onElegir(opcion)
+                  setAbierta(false)
+                }}
+                className="flex w-full flex-col items-start px-5 py-3 text-left touch-manipulation [-webkit-tap-highlight-color:transparent] hover:bg-black/[0.04] focus-visible:bg-black/[0.04] focus-visible:outline-none"
+              >
+                <span className="font-display text-2xl uppercase leading-none tracking-wide">
+                  {opcion.codigo}
+                </span>
+                {opcion.nombre ? <span className="mt-1 text-sm text-black/60">{opcion.nombre}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }
@@ -823,6 +974,8 @@ function SelectorEnvio({
 function HistorialSemana({
   acento,
   envios,
+  todos,
+  destacadoId,
   error,
   cargando,
   esPc,
@@ -830,13 +983,24 @@ function HistorialSemana({
 }: {
   acento: string
   envios: EnvioSemana[]
+  todos: EnvioSemana[]
+  destacadoId: string | null
   error: string | null
   cargando: boolean
   esPc: boolean
   onReintentar: () => void
 }) {
   const tituloId = useId()
-  const totales = totalesSemana(envios.map((envio) => ({ total: envio.total, prendas: envio.prendas })))
+  const [abiertoId, setAbiertoId] = useState<string | null>(null)
+  const totales = totalesSemana(todos.map((envio) => ({ total: envio.total, prendas: envio.prendas })))
+
+  useEffect(() => {
+    if (destacadoId) setAbiertoId(destacadoId)
+  }, [destacadoId])
+
+  function alternar(id: string) {
+    setAbiertoId((actual) => (actual === id ? null : id))
+  }
 
   return (
     <section aria-labelledby={tituloId} className="flex flex-col gap-4">
@@ -844,7 +1008,7 @@ function HistorialSemana({
         <h2 id={tituloId} className="font-display text-4xl uppercase leading-none tracking-wide">
           Historial de la semana
         </h2>
-        {!error && (!cargando || envios.length > 0) ? (
+        {!error && (!cargando || todos.length > 0) ? (
           <dl className="mt-4 grid grid-cols-2 gap-6 lg:mt-0 lg:min-w-80 lg:gap-10">
             <div>
               <dt className="text-sm">Total generado</dt>
@@ -866,9 +1030,15 @@ function HistorialSemana({
         </button>
       ) : null}
 
-      {!cargando && !error && envios.length === 0 ? (
+      {!cargando && !error && todos.length === 0 ? (
         <p className={esPc ? 'text-base' : 'rounded-3xl bg-white px-5 py-8 text-center shadow-sm'}>
           Aún no hay envíos esta semana
+        </p>
+      ) : null}
+
+      {!cargando && !error && todos.length > 0 && envios.length === 0 ? (
+        <p className={esPc ? 'text-base' : 'rounded-3xl bg-white px-5 py-8 text-center shadow-sm'}>
+          Ningún envío coincide con la búsqueda.
         </p>
       ) : null}
 
@@ -898,15 +1068,12 @@ function HistorialSemana({
               </thead>
               <tbody>
                 {envios.map((envio) => (
-                  <tr key={envio.id} className="border-b border-black/10 last:border-b-0">
-                    <td className="px-4 py-3">{textoFecha(envio.fecha)}</td>
-                    <td className="px-4 py-3 font-display text-2xl uppercase leading-none tracking-wide">
-                      {envio.codigo}
-                    </td>
-                    <td className="px-4 py-3">{etiquetaTipo(envio.tipo)}</td>
-                    <td className="px-4 py-3 text-right text-xl font-bold tabular-nums">{envio.prendas}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(envio.total)}</td>
-                  </tr>
+                  <FilasHistorial
+                    key={envio.id}
+                    envio={envio}
+                    abierta={abiertoId === envio.id}
+                    onAlternar={() => alternar(envio.id)}
+                  />
                 ))}
               </tbody>
             </table>
@@ -917,20 +1084,122 @@ function HistorialSemana({
       {envios.length > 0 && !esPc ? (
         <ul className="flex flex-col gap-3">
           {envios.map((envio) => (
-            <li key={envio.id} className="rounded-3xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-black/60">{textoFecha(envio.fecha)}</p>
-              <p className="mt-1 break-words font-display text-3xl uppercase leading-none tracking-wide">
-                {envio.codigo}
-              </p>
-              <p className="mt-3 text-base">
-                {etiquetaTipo(envio.tipo)} · {textoCantidad(envio.prendas)} · {formatearDolares(envio.total)}
-              </p>
-            </li>
+            <FilaHistorial
+              key={envio.id}
+              envio={envio}
+              abierta={abiertoId === envio.id}
+              onAlternar={() => alternar(envio.id)}
+            />
           ))}
         </ul>
       ) : null}
     </section>
   )
+}
+
+function FilaHistorial({
+  envio,
+  abierta,
+  onAlternar,
+}: {
+  envio: EnvioSemana
+  abierta: boolean
+  onAlternar: () => void
+}) {
+  const detalleId = useId()
+
+  return (
+    <li id={`envio-${envio.id}`} className="flex scroll-mt-4 flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm">
+      <button
+        type="button"
+        aria-expanded={abierta}
+        aria-controls={detalleId}
+        onClick={onAlternar}
+        className="touch-manipulation text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+      >
+        <span className="flex items-start justify-between gap-3">
+          <span className="min-w-0">
+            <span className="block text-sm text-black/60">{textoFecha(envio.fecha)}</span>
+            <span className="mt-1 block break-words font-display text-3xl uppercase leading-none tracking-wide">
+              {envio.codigo}
+            </span>
+          </span>
+          {abierta ? <ChevronUp aria-hidden size={22} /> : <ChevronDown aria-hidden size={22} />}
+        </span>
+        <span className="mt-3 block text-base">
+          {etiquetaTipo(envio.tipo)} · {textoCantidad(envio.prendas)} · {formatearDolares(envio.total)}
+        </span>
+      </button>
+      {abierta ? <DetalleEnvio id={detalleId} grupos={envio.detalle} /> : null}
+    </li>
+  )
+}
+
+function FilasHistorial({
+  envio,
+  abierta,
+  onAlternar,
+}: {
+  envio: EnvioSemana
+  abierta: boolean
+  onAlternar: () => void
+}) {
+  const detalleId = useId()
+
+  function alternarSiEsDato(evento: MouseEvent<HTMLTableRowElement>) {
+    const destino = evento.target
+    if (!(destino instanceof Element)) return
+    if (destino.closest('a, button')) return
+    onAlternar()
+  }
+
+  return (
+    <>
+      <tr
+        id={`envio-${envio.id}`}
+        className={`scroll-mt-4 border-b border-black/10 align-top ${abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
+        onClick={alternarSiEsDato}
+      >
+        <td className="px-4 py-3">{textoFecha(envio.fecha)}</td>
+        <td className="px-4 py-3">
+          <button
+            type="button"
+            aria-expanded={abierta}
+            aria-controls={detalleId}
+            onClick={onAlternar}
+            className="inline-flex items-center gap-2 break-words text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+          >
+            {envio.codigo}
+            {abierta ? <ChevronUp aria-hidden size={18} /> : <ChevronDown aria-hidden size={18} />}
+          </button>
+        </td>
+        <td className="px-4 py-3">{etiquetaTipo(envio.tipo)}</td>
+        <td className="px-4 py-3 text-right text-xl font-bold tabular-nums">{envio.prendas}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(envio.total)}</td>
+      </tr>
+      {abierta ? (
+        <tr className="border-b border-black/10 bg-fondo last:border-b-0">
+          <td colSpan={5} className="px-4 py-4">
+            <div className="max-w-sm lg:max-w-lg">
+              <DetalleEnvio id={detalleId} grupos={envio.detalle} />
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </>
+  )
+}
+
+function DetalleEnvio({ id, grupos }: { id: string; grupos: GrupoPrecio[] }) {
+  if (grupos.length === 0) {
+    return (
+      <p id={id} className="text-base">
+        No hay detalle de prendas en esta venta.
+      </p>
+    )
+  }
+
+  return <ListaPrendas id={id} grupos={grupos} />
 }
 
 function textoCantidad(prendas: number): string {

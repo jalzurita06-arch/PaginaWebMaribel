@@ -6,6 +6,7 @@ import {
   envioEsAntiguo,
   esTipoEnvio,
   fechaCorteEnvios,
+  leerDetalleEnvio,
   mensajeEnvioConfirmado,
   mensajeErrorEnvio,
 } from './envios.ts'
@@ -76,15 +77,16 @@ describe('agruparCanastasAbiertas', () => {
   it('junta las prendas de cada clienta, calcula saldo y ordena por código', () => {
     expect(
       agruparCanastasAbiertas([
-        { clienteId: '2', codigo: 'Z', saldoFavor: 5, precio: 9, cantidad: 1 },
-        { clienteId: '1', codigo: 'A', saldoFavor: 10, precio: 5, cantidad: 2 },
-        { clienteId: '1', codigo: 'A', saldoFavor: 10, precio: 5, cantidad: 1 },
-        { clienteId: '3', codigo: 'B', saldoFavor: 0, precio: 4, cantidad: 0 },
+        { clienteId: '2', codigo: 'Z', nombre: 'Zulema', saldoFavor: 5, precio: 9, cantidad: 1 },
+        { clienteId: '1', codigo: 'A', nombre: 'Ana', saldoFavor: 10, precio: 5, cantidad: 2 },
+        { clienteId: '1', codigo: 'A', nombre: 'Ana', saldoFavor: 10, precio: 5, cantidad: 1 },
+        { clienteId: '3', codigo: 'B', nombre: null, saldoFavor: 0, precio: 4, cantidad: 0 },
       ]),
     ).toEqual([
       {
         clienteId: '1',
         codigo: 'A',
+        nombre: 'Ana',
         saldoFavor: 10,
         prendas: 3,
         total: 15,
@@ -94,6 +96,7 @@ describe('agruparCanastasAbiertas', () => {
       {
         clienteId: '2',
         codigo: 'Z',
+        nombre: 'Zulema',
         saldoFavor: 5,
         prendas: 1,
         total: 9,
@@ -101,6 +104,27 @@ describe('agruparCanastasAbiertas', () => {
         grupos: [{ precio: 9, cantidad: 1, subtotal: 9 }],
       },
     ])
+  })
+})
+
+describe('leerDetalleEnvio', () => {
+  it('lee precio, cantidad y subtotal y ignora filas inválidas', () => {
+    expect(
+      leerDetalleEnvio([
+        { precio: 5, cantidad: 3, subtotal: 15 },
+        { precio: 9, cantidad: 0, subtotal: 0 },
+        { precio: 'no', cantidad: 2 },
+        { precio: 6, cantidad: 2 },
+      ]),
+    ).toEqual([
+      { precio: 5, cantidad: 3, subtotal: 15 },
+      { precio: 6, cantidad: 2, subtotal: 12 },
+    ])
+  })
+
+  it('queda vacío si no hay detalle', () => {
+    expect(leerDetalleEnvio(null)).toEqual([])
+    expect(leerDetalleEnvio({})).toEqual([])
   })
 })
 
