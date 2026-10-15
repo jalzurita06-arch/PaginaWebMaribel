@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, Bell, Pencil } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { EtiquetaEstado } from '../components/EtiquetaEstado.tsx'
@@ -9,6 +9,7 @@ import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
+import { abonoAtrasado } from '../lib/abonoAtrasado.ts'
 import { formatearDolares } from '../lib/dinero.ts'
 import { excedenteAbono, mensajeAbonoRegistrado, saldoPendiente, totalCanasta } from '../lib/reglas.ts'
 import {
@@ -17,6 +18,7 @@ import {
   listarAbonos,
   listarCanastaCliente,
   listarResumenAbonos,
+  listarUltimosAbonos,
   obtenerCliente,
   type Abono,
   type Cliente,
@@ -45,6 +47,7 @@ export function Abonos() {
   const [recargaLista, setRecargaLista] = useState(0)
   const [recargaDetalle, setRecargaDetalle] = useState(0)
   const [clientes, setClientes] = useState<ResumenClienteAbono[]>([])
+  const [ultimosAbonos, setUltimosAbonos] = useState<Record<string, string> | null>(null)
   const [cargandoLista, setCargandoLista] = useState(true)
   const [claveCargada, setClaveCargada] = useState<string | null>(null)
   const [errorLista, setErrorLista] = useState<string | null>(null)
@@ -69,16 +72,23 @@ export function Abonos() {
     void (async () => {
       setCargandoLista(true)
       setErrorLista(null)
+      setUltimosAbonos(null)
       const resultado = await listarResumenAbonos(consulta)
+      if (!vigente) return
+      const fechas = resultado.ok ? await listarUltimosAbonos(resultado.datos.map((fila) => fila.id)) : null
       if (!vigente) return
       setCargandoLista(false)
       if (!resultado.ok) {
         setClientes([])
+        setUltimosAbonos(null)
         setErrorLista(resultado.mensaje)
         return
       }
       setClientes(resultado.datos)
+      setUltimosAbonos(fechas?.ok ? fechas.datos : null)
       setErrorLista(null)
+      if (fechas && !fechas.ok) setAviso({ texto: fechas.mensaje, tono: 'error' })
+      else setAviso((actual) => (actual?.tono === 'error' ? null : actual))
     })()
 
     return () => {
@@ -135,6 +145,11 @@ export function Abonos() {
       vigente = false
     }
   }, [clienteId, claveDetalle, claveCargada])
+
+  function sinAbono(clienteId: string) {
+    if (!ultimosAbonos) return false
+    return abonoAtrasado(ultimosAbonos[clienteId], new Date())
+  }
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
     setAviso({ texto, tono })
@@ -256,6 +271,11 @@ export function Abonos() {
           cargando={cargandoDetalleVisible}
           errorDetalle={cargandoDetalleVisible ? null : textoErrorDetalle}
           errorAbonos={cargandoDetalleVisible ? null : textoErrorAbonos}
+          sinAbono={
+            detalleVisible && !cargandoDetalleVisible && textoErrorAbonos == null
+              ? abonoAtrasado(abonos[0]?.fecha, new Date())
+              : false
+          }
           onVolver={volverABuscar}
           onReintentar={() => setRecargaDetalle((valor) => valor + 1)}
           onAgregar={() => {
@@ -275,6 +295,7 @@ export function Abonos() {
           consulta={consulta}
           clientes={clientes}
           cargando={cargandoLista}
+          sinAbono={sinAbono}
           error={errorLista}
           onBusqueda={setBusqueda}
           onBuscarYa={() => setConsulta(busqueda.trim())}
@@ -291,6 +312,7 @@ function Buscador({
   consulta,
   clientes,
   cargando,
+  sinAbono,
   error,
   onBusqueda,
   onBuscarYa,
@@ -301,6 +323,7 @@ function Buscador({
   consulta: string
   clientes: ResumenClienteAbono[]
   cargando: boolean
+  sinAbono: (clienteId: string) => boolean
   error: string | null
   onBusqueda: (valor: string) => void
   onBuscarYa: () => void
@@ -352,21 +375,26 @@ function Buscador({
       ) : null}
 
       <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
-        {clientes.map((cliente) => (
+        {clientes.map((cliente) => {
+          const atrasado = sinAbono(cliente.id)
+          return (
           <li key={cliente.id} className="h-full">
             <motion.button
               type="button"
               onClick={() => onElegir(cliente)}
               whileTap={reducirMovimiento ? undefined : toque}
               transition={{ duration: 0.15 }}
-              className="flex h-full w-full touch-manipulation flex-col gap-4 rounded-3xl bg-white p-5 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+              className={`flex h-full w-full touch-manipulation flex-col gap-4 rounded-3xl p-5 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${atrasado ? 'bg-peligro' : 'bg-white'}`}
             >
               <span className="flex items-start justify-between gap-4">
                 <span className="flex min-w-0 flex-1 items-baseline gap-3">
                   <span className="shrink-0 font-display text-4xl uppercase leading-none tracking-wide">
                     {cliente.codigo}
                   </span>
-                  <span className="min-w-0 truncate text-sm">{cliente.nombre ?? '\u00a0'}</span>
+                  <span className="flex min-w-0 items-center gap-1.5 text-sm">
+                    {cliente.nombre ? <span className="min-w-0 truncate">{cliente.nombre}</span> : null}
+                    {atrasado ? <CampanaAbono /> : null}
+                  </span>
                 </span>
                 <EtiquetaEstado estado={cliente.estado} />
               </span>
@@ -377,9 +405,19 @@ function Buscador({
               </span>
             </motion.button>
           </li>
-        ))}
+          )
+        })}
       </ul>
     </div>
+  )
+}
+
+function CampanaAbono() {
+  return (
+    <span className="inline-flex shrink-0" title="Sin abono en 5 días">
+      <Bell aria-hidden size={16} strokeWidth={2.25} />
+      <span className="sr-only">Sin abono en los últimos 5 días</span>
+    </span>
   )
 }
 
@@ -391,6 +429,7 @@ function DetalleAbono({
   cargando,
   errorDetalle,
   errorAbonos,
+  sinAbono,
   onVolver,
   onReintentar,
   onAgregar,
@@ -403,6 +442,7 @@ function DetalleAbono({
   cargando: boolean
   errorDetalle: string | null
   errorAbonos: string | null
+  sinAbono: boolean
   onVolver: () => void
   onReintentar: () => void
   onAgregar: () => void
@@ -435,14 +475,21 @@ function DetalleAbono({
 
       {!cargando && cliente && total != null ? (
         <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
-        <article className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:p-8">
+        <article
+          className={`flex flex-col gap-5 rounded-3xl p-5 shadow-sm lg:p-8 ${sinAbono ? 'bg-peligro' : 'bg-white'}`}
+        >
           <div className="flex items-start justify-between gap-4">
             <h2 className="min-w-0 break-words font-display text-5xl uppercase leading-none tracking-wide">
               {cliente.codigo}
             </h2>
             <EtiquetaEstado estado={cliente.estado} />
           </div>
-          {cliente.nombre ? <p className="break-words text-sm">{cliente.nombre}</p> : null}
+          {cliente.nombre || sinAbono ? (
+            <p className="flex items-center gap-1.5 break-words text-sm">
+              {cliente.nombre ? <span className="min-w-0 break-words">{cliente.nombre}</span> : null}
+              {sinAbono ? <CampanaAbono /> : null}
+            </p>
+          ) : null}
           {cliente.estado === 'inactivo' ? (
             <p className="text-sm leading-relaxed">
               Está inactivo. Si el abono deja saldo a favor, vuelve a estar activo.

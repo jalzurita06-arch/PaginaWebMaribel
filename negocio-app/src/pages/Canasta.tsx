@@ -1,13 +1,14 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Bell, ChevronDown, ChevronUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
+import { abonoAtrasado } from '../lib/abonoAtrasado.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
@@ -24,6 +25,7 @@ import {
   type EnvioSemana,
   type TipoEnvio,
 } from '../services/envios.ts'
+import { listarUltimosAbonos } from '../services/clientes.ts'
 
 type AvisoEstado = { texto: string; tono: 'ok' | 'error' }
 type PasoSelector = 'menu' | 'tipo'
@@ -74,6 +76,7 @@ export function Canasta() {
   const [aviso, setAviso] = useState<AvisoEstado | null>(null)
   const [cargando, setCargando] = useState(true)
   const [canastas, setCanastas] = useState<CanastaAbierta[]>([])
+  const [ultimosAbonos, setUltimosAbonos] = useState<Record<string, string> | null>(null)
   const [envios, setEnvios] = useState<EnvioSemana[]>([])
   const [errorCanastas, setErrorCanastas] = useState<string | null>(null)
   const [errorHistorial, setErrorHistorial] = useState<string | null>(null)
@@ -103,12 +106,19 @@ export function Canasta() {
       ])
       if (!vigente) return
 
+      const abonosResultado = canastasResultado.ok
+        ? await listarUltimosAbonos(canastasResultado.datos.map((canasta) => canasta.clienteId))
+        : null
+      if (!vigente) return
+
       setCargando(false)
       if (!canastasResultado.ok) {
         setCanastas([])
+        setUltimosAbonos(null)
         setErrorCanastas(canastasResultado.mensaje)
       } else {
         setCanastas(canastasResultado.datos)
+        setUltimosAbonos(abonosResultado?.ok ? abonosResultado.datos : null)
         setErrorCanastas(null)
       }
       if (!enviosResultado.ok) {
@@ -122,6 +132,7 @@ export function Canasta() {
       if (!canastasResultado.ok) setAviso({ texto: canastasResultado.mensaje, tono: 'error' })
       else if (!enviosResultado.ok) setAviso({ texto: enviosResultado.mensaje, tono: 'error' })
       else if (!borrado.ok) setAviso({ texto: borrado.mensaje, tono: 'error' })
+      else if (abonosResultado && !abonosResultado.ok) setAviso({ texto: abonosResultado.mensaje, tono: 'error' })
       else setAviso((actual) => (actual?.tono === 'error' ? null : actual))
     })()
 
@@ -185,6 +196,11 @@ export function Canasta() {
   )
   const enviosVisibles = envios.filter((envio) => coincideCliente(busqueda, envio.codigo, null))
 
+  function sinAbono(clienteId: string) {
+    if (!ultimosAbonos) return false
+    return abonoAtrasado(ultimosAbonos[clienteId], new Date())
+  }
+
   function irA(destino: VistaCanasta) {
     setVista(destino)
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -247,6 +263,7 @@ export function Canasta() {
             <TablaCanastas
               canastas={canastasVisibles}
               acento={acento}
+              sinAbono={sinAbono}
               abiertaId={abiertaId}
               selector={selector}
               ocupado={ocupado}
@@ -269,6 +286,7 @@ export function Canasta() {
                   key={canasta.clienteId}
                   canasta={canasta}
                   acento={acento}
+                  sinAbono={sinAbono(canasta.clienteId)}
                   abierta={abiertaId === canasta.clienteId}
                   selector={selector?.clienteId === canasta.clienteId ? selector : null}
                   ocupado={ocupado}
@@ -367,9 +385,37 @@ function ResumenAbiertas({
   )
 }
 
+function NombreConCampana({
+  nombre,
+  sinAbono,
+  className,
+}: {
+  nombre: string | null
+  sinAbono: boolean
+  className: string
+}) {
+  if (!nombre && !sinAbono) return null
+  return (
+    <span className={`flex items-center gap-1.5 ${className}`}>
+      {nombre ? <span className="min-w-0 break-words">{nombre}</span> : null}
+      {sinAbono ? <CampanaAbono /> : null}
+    </span>
+  )
+}
+
+function CampanaAbono() {
+  return (
+    <span className="inline-flex shrink-0" title="Sin abono en 5 días">
+      <Bell aria-hidden size={16} strokeWidth={2.25} />
+      <span className="sr-only">Sin abono en los últimos 5 días</span>
+    </span>
+  )
+}
+
 function FilaCanasta({
   canasta,
   acento,
+  sinAbono,
   abierta,
   selector,
   ocupado,
@@ -383,6 +429,7 @@ function FilaCanasta({
 }: {
   canasta: CanastaAbierta
   acento: string
+  sinAbono: boolean
   abierta: boolean
   selector: Selector | null
   ocupado: boolean
@@ -397,7 +444,10 @@ function FilaCanasta({
   const detalleId = useId()
 
   return (
-    <li id={`canasta-${canasta.clienteId}`} className="flex scroll-mt-4 flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm">
+    <li
+      id={`canasta-${canasta.clienteId}`}
+      className={`flex scroll-mt-4 flex-col gap-4 rounded-3xl p-5 shadow-sm ${sinAbono ? 'bg-peligro' : 'bg-white'}`}
+    >
       <button
         type="button"
         aria-expanded={abierta}
@@ -410,9 +460,7 @@ function FilaCanasta({
             <span className="block break-words font-display text-4xl uppercase leading-none tracking-wide">
               {canasta.codigo}
             </span>
-            {canasta.nombre ? (
-              <span className="mt-2 block break-words text-sm">{canasta.nombre}</span>
-            ) : null}
+            <NombreConCampana nombre={canasta.nombre} sinAbono={sinAbono} className="mt-2 text-sm" />
           </span>
           <span className="shrink-0 pt-1 text-xl font-bold leading-none">{textoCantidad(canasta.prendas)}</span>
         </span>
@@ -444,6 +492,7 @@ function FilaCanasta({
 function TablaCanastas({
   canastas,
   acento,
+  sinAbono,
   abiertaId,
   selector,
   ocupado,
@@ -457,6 +506,7 @@ function TablaCanastas({
 }: {
   canastas: CanastaAbierta[]
   acento: string
+  sinAbono: (clienteId: string) => boolean
   abiertaId: string | null
   selector: Selector | null
   ocupado: boolean
@@ -503,6 +553,7 @@ function TablaCanastas({
                   key={canasta.clienteId}
                   canasta={canasta}
                   acento={acento}
+                  sinAbono={sinAbono(canasta.clienteId)}
                   abierta={abierta}
                   selector={selector?.clienteId === canasta.clienteId ? selector : null}
                   ocupado={ocupado}
@@ -526,6 +577,7 @@ function TablaCanastas({
 function FilasTabla({
   canasta,
   acento,
+  sinAbono,
   abierta,
   selector,
   ocupado,
@@ -539,6 +591,7 @@ function FilasTabla({
 }: {
   canasta: CanastaAbierta
   acento: string
+  sinAbono: boolean
   abierta: boolean
   selector: Selector | null
   ocupado: boolean
@@ -563,7 +616,7 @@ function FilasTabla({
     <>
       <tr
         id={`canasta-${canasta.clienteId}`}
-        className={`scroll-mt-4 border-b border-black/10 align-top ${abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
+        className={`scroll-mt-4 border-b border-black/10 align-top ${sinAbono ? 'bg-peligro' : abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
         onClick={alternarSiEsDato}
       >
         <td className="px-4 py-3">
@@ -576,7 +629,7 @@ function FilasTabla({
           >
             {canasta.codigo}
           </button>
-          {canasta.nombre ? <p className="mt-1 text-sm">{canasta.nombre}</p> : null}
+          <NombreConCampana nombre={canasta.nombre} sinAbono={sinAbono} className="mt-1 text-sm" />
         </td>
         <td className="px-4 py-3 text-right text-xl font-bold tabular-nums leading-none">
           {canasta.prendas}
