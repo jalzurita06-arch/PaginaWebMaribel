@@ -233,7 +233,7 @@ export function Compartir() {
             </div>
 
             <div className="flex flex-col gap-3">
-              <h3 className="text-base">{esVenta ? 'Esta venta' : 'Prendas'}</h3>
+              <h3 className="text-base">{esVenta ? 'Esta venta' : 'Cant. prendas'}</h3>
               {resumen.grupos.length === 0 ? (
                 <p role="status" className="rounded-3xl bg-fondo px-5 py-8 text-center">
                   {esVenta ? 'Esta venta no tiene prendas.' : 'La canasta no tiene prendas.'}
@@ -256,7 +256,7 @@ export function Compartir() {
           <div className="flex flex-col gap-5">
             <dl className={`grid gap-3 ${esVenta ? 'grid-cols-1' : 'grid-cols-3'}`}>
               {esVenta ? (
-                <Monto etiqueta="Total de esta venta" valor={resumen.total} />
+                <Monto etiqueta="Total de esta canasta" valor={resumen.total} />
               ) : (
                 <>
                   <Monto etiqueta="Total" valor={resumen.total} />

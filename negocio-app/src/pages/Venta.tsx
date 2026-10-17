@@ -577,7 +577,7 @@ function TablaClientesVenta({
                 Nombre
               </th>
               <th scope="col" className="px-4 py-3 font-semibold">
-                Prendas
+                Cant. prendas
               </th>
               <th scope="col" className="px-4 py-3 font-semibold">
                 Estado
@@ -878,7 +878,7 @@ function PasoResumen({
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start lg:gap-8">
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm lg:p-8">
-            <h3 className="text-base">Prendas</h3>
+            <h3 className="text-base">Cant. prendas</h3>
             <ul className="flex flex-col gap-3">
               {grupos.map((grupo) => (
                 <li key={grupo.precio} className="flex items-baseline justify-between gap-3">

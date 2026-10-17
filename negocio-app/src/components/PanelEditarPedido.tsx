@@ -323,7 +323,7 @@ export function PanelEditarPedido({
               {/* Resumen recalculado */}
               <div className="flex items-center justify-between rounded-2xl bg-black/5 px-4 py-3">
                 <span className="text-sm font-medium text-black/70">
-                  Total prendas:{' '}
+                  Cant. prendas:{' '}
                   <strong className="text-base font-bold text-black tabular-nums">
                     {totalPrendas}
                   </strong>

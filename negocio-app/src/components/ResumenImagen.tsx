@@ -109,7 +109,7 @@ export function ResumenImagen({
       <Regla />
 
       {concepto ? (
-        <Linea etiqueta="Total de esta venta" valor={formatearDolares(total)} fuerte />
+        <Linea etiqueta="Total de esta canasta" valor={formatearDolares(total)} fuerte />
       ) : (
         <>
           <Linea etiqueta="Total de la canasta" valor={formatearDolares(total)} />

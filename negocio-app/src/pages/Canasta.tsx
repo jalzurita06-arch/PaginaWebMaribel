@@ -487,7 +487,7 @@ function ResumenAbiertas({
           <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl">{formatearDolares(saldo)}</dd>
         </div>
         <div>
-          <dt className="text-sm">Prendas</dt>
+          <dt className="text-sm">Cant. prendas</dt>
           <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl">{prendas}</dd>
         </div>
       </dl>
@@ -657,7 +657,7 @@ function TablaCanastas({
                 Código
               </th>
               <th scope="col" className="px-4 py-3 pl-2 text-right font-semibold">
-                Prendas
+                Cant. prendas
               </th>
               <th scope="col" className="px-4 py-3 text-right font-semibold">
                 Total
@@ -902,7 +902,7 @@ function ListaPrendas({
   return (
     <section id={id} className="flex min-w-0 flex-col gap-2" aria-labelledby={tituloId}>
       <h3 id={tituloId} className={titulo}>
-        Prendas
+        Cant. prendas
       </h3>
       {usarDias ? (
         <ul className={`flex flex-col ${apretado ? 'gap-3' : 'gap-3.5'}`}>
@@ -1528,7 +1528,7 @@ function HistorialSemana({
                 <dd className="font-display text-2xl leading-none tracking-wide lg:text-3xl">{formatearDolares(totales.total)}</dd>
               </div>
               <div>
-                <dt className="text-sm">Prendas</dt>
+                <dt className="text-sm">Cant. prendas</dt>
                 <dd className="font-display text-2xl leading-none tracking-wide lg:text-3xl">{totales.prendas}</dd>
               </div>
             </dl>
@@ -1586,7 +1586,7 @@ function HistorialSemana({
                     Tipo
                   </th>
                   <th scope="col" className="px-4 py-3 text-right font-semibold">
-                    Prendas
+                    Cant. prendas
                   </th>
                   <th scope="col" className="px-4 py-3 text-right font-semibold">
                     Total
