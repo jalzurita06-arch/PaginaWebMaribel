@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { redondear2 } from './dinero.ts'
 
 const esquemaCliente = z.object({
-  codigo: z.string().trim().min(1, 'Escribe el código.'),
+  codigo: z.string().trim().min(1, 'Escribe el código.').transform(normalizarCodigo),
   nombre: z.string().trim(),
   telefono: z
     .string()
@@ -53,6 +53,10 @@ export type ErroresAbono = {
 }
 
 type ResultadoFormulario<T> = { ok: true; datos: T } | { ok: false; errores: ErroresCliente }
+
+export function normalizarCodigo(valor: string): string {
+  return valor.trim().toLocaleUpperCase('es')
+}
 
 export function validarNuevoCliente(entrada: {
   codigo: string

@@ -70,7 +70,7 @@ export function textoWhatsApp(
   cliente: { nombre: string | null; codigo: string },
   datos: DatosBancarios,
 ): string {
-  const codigo = cliente.codigo.trim()
+  const codigo = cliente.codigo.trim().toLocaleUpperCase('es')
   const nombre = cliente.nombre?.trim() ?? ''
   const saludo = nombre
     ? `\u00A1Hola! ${nombre}-${codigo} ${FLORES}`

@@ -48,7 +48,7 @@ export function FormularioCliente({
   const refCodigo = useRef<HTMLInputElement>(null)
   const refTelefono = useRef<HTMLInputElement>(null)
   const refAbono = useRef<HTMLInputElement>(null)
-  const [codigo, setCodigo] = useState(cliente?.codigo ?? '')
+  const [codigo, setCodigo] = useState(cliente?.codigo.toLocaleUpperCase('es') ?? '')
   const [nombre, setNombre] = useState(cliente?.nombre ?? '')
   const [telefono, setTelefono] = useState(cliente?.telefono ?? '')
   const [abonoInicial, setAbonoInicial] = useState('')
@@ -138,7 +138,7 @@ export function FormularioCliente({
             aria-invalid={errores.codigo ? true : undefined}
             aria-describedby={errores.codigo ? idErrorCodigo : undefined}
             onChange={(evento) => {
-              setCodigo(evento.target.value)
+              setCodigo(evento.target.value.toLocaleUpperCase('es'))
               setErrores((actual) => ({ ...actual, codigo: undefined }))
               setMensaje(null)
             }}

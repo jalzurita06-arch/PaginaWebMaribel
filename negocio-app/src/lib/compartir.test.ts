@@ -54,7 +54,7 @@ describe('teléfono para WhatsApp', () => {
 
 describe('texto de WhatsApp', () => {
   it('arma el mensaje con nombre, código y datos del negocio', () => {
-    expect(textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, banco)).toBe(mensajeConNombre)
+    expect(textoWhatsApp({ nombre: 'Ana', codigo: 'a1' }, banco)).toBe(mensajeConNombre)
   })
 
   it('usa solo el código cuando no hay nombre', () => {

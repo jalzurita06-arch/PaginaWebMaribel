@@ -12,7 +12,7 @@ describe('validarNuevoCliente', () => {
   it('acepta código, teléfono y un abono inicial', () => {
     expect(
       validarNuevoCliente({
-        codigo: '  A12  ',
+        codigo: '  a12  ',
         nombre: '  ANA  ',
         telefono: '0991234567',
         abonoInicial: '5,5',
@@ -141,7 +141,7 @@ describe('capitalizarNombre', () => {
 
 describe('validarEdicionCliente', () => {
   it('no pide abono y permite borrar el nombre', () => {
-    expect(validarEdicionCliente({ codigo: 'A12', nombre: '', telefono: '0991234567' })).toEqual({
+    expect(validarEdicionCliente({ codigo: 'a12', nombre: '', telefono: '0991234567' })).toEqual({
       ok: true,
       datos: { codigo: 'A12', nombre: null, telefono: '0991234567' },
     })

@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { organizarAbonosPorCliente, ultimasFechasAbono } from '../lib/abonoAtrasado.ts'
-import { capitalizarNombre, type DatosNuevoCliente } from '../lib/clienteFormulario.ts'
+import {
+  capitalizarNombre,
+  normalizarCodigo,
+  type DatosNuevoCliente,
+} from '../lib/clienteFormulario.ts'
 import { redondear2 } from '../lib/dinero.ts'
 import {
   ordenarPorCanasta,
@@ -187,7 +191,7 @@ export async function actualizarCliente(
   const payload: { codigo?: string; nombre?: string | null; telefono?: string } = {}
 
   if (cambios.codigo !== undefined) {
-    const codigo = cambios.codigo.trim()
+    const codigo = normalizarCodigo(cambios.codigo)
     if (!codigo) return { ok: false, mensaje: 'Escribe el código.' }
     payload.codigo = codigo
   }
@@ -586,7 +590,7 @@ function esFallo(
 function leerCampos(
   datos: { codigo: string; nombre?: string | null; telefono: string },
 ): { ok: true; codigo: string; nombre: string | null; telefono: string } | { ok: false; mensaje: string } {
-  const codigo = datos.codigo.trim()
+  const codigo = normalizarCodigo(datos.codigo)
   if (!codigo) return { ok: false, mensaje: 'Escribe el código.' }
 
   const telefono = leerTelefono(datos.telefono)
@@ -765,7 +769,7 @@ function leerCliente(valor: unknown): Cliente | null {
 
   return {
     id: fila.id,
-    codigo: fila.codigo,
+    codigo: normalizarCodigo(fila.codigo),
     nombre: fila.nombre?.trim() ? fila.nombre.trim() : null,
     telefono: fila.telefono,
     estado: fila.estado,
