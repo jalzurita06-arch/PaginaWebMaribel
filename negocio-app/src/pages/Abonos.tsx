@@ -517,8 +517,13 @@ function DetalleAbono({
           ) : null}
           <dl className="flex flex-col gap-4">
             <Monto etiqueta="Total de la canasta" valor={total} />
-            <Monto etiqueta="Saldo pendiente" valor={saldoPendiente(total, cliente.saldo_favor)} />
             <Monto etiqueta="Abonado" valor={cliente.saldo_favor} />
+            <div className="border-t border-black/40" role="separator" />
+            <Monto
+              etiqueta="Saldo pendiente"
+              valor={saldoPendiente(total, cliente.saldo_favor)}
+              destacado
+            />
           </dl>
           <button
             type="button"
@@ -582,11 +587,29 @@ function Cifra({ etiqueta, valor }: { etiqueta: string; valor: number }) {
   )
 }
 
-function Monto({ etiqueta, valor }: { etiqueta: string; valor: number }) {
+function Monto({
+  etiqueta,
+  valor,
+  destacado = false,
+}: {
+  etiqueta: string
+  valor: number
+  destacado?: boolean
+}) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-sm text-black/60">{etiqueta}</dt>
-      <dd className="text-xl font-semibold tabular-nums">{formatearDolares(valor)}</dd>
+      <dt className={destacado ? 'text-base font-bold text-black' : 'text-sm text-black/60'}>
+        {etiqueta}
+      </dt>
+      <dd
+        className={
+          destacado
+            ? 'text-2xl font-bold tabular-nums'
+            : 'text-xl font-semibold tabular-nums'
+        }
+      >
+        {formatearDolares(valor)}
+      </dd>
     </div>
   )
 }

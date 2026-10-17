@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
-import { redondear2 } from '../lib/dinero.ts'
+import { formatearDolares, redondear2 } from '../lib/dinero.ts'
 import { validarAbono, type ErroresAbono } from '../lib/clienteFormulario.ts'
 import { useConexion } from '../context/useConexion.ts'
 import type { Cliente, Resultado } from '../services/clientes.ts'
@@ -10,9 +10,11 @@ type Props = {
   cliente: Cliente
   acento: string
   guardando: boolean
+  titulo?: string
   textoCancelar?: string
   inicial?: { monto: number; fecha: string }
-  onCancelar: () => void
+  autoFocus?: boolean
+  onCancelar?: () => void
   onGuardar: (monto: number, fecha: string) => Promise<Resultado<Cliente>>
 }
 
@@ -23,8 +25,10 @@ export function FormularioAbono({
   cliente,
   acento,
   guardando,
+  titulo,
   textoCancelar: _textoCancelar = 'Lista',
   inicial,
+  autoFocus = true,
   onCancelar: _onCancelar,
   onGuardar,
 }: Props) {
@@ -40,20 +44,24 @@ export function FormularioAbono({
   const [fecha, setFecha] = useState(inicial?.fecha ?? fechaHoy)
   const [errores, setErrores] = useState<ErroresAbono>({})
   const [mensaje, setMensaje] = useState<string | null>(null)
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null)
 
   useEffect(() => {
-    refMonto.current?.focus()
-  }, [])
+    if (autoFocus) {
+      refMonto.current?.focus()
+    }
+  }, [autoFocus])
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault()
     if (envio.current || guardando) return
     setMensaje(null)
+    setMensajeExito(null)
 
     const validacion = validarAbono({ monto, fecha })
     if (!validacion.ok) {
       setErrores(validacion.errores)
-      if (validacion.errores.monto) refMonto.current?.focus()
+      if (validacion.errores.monto && autoFocus) refMonto.current?.focus()
       return
     }
     if (!enLinea) {
@@ -64,14 +72,21 @@ export function FormularioAbono({
     envio.current = true
     const resultado = await onGuardar(validacion.datos.monto, validacion.datos.fecha)
     envio.current = false
-    if (!resultado.ok) setMensaje(resultado.mensaje)
+    if (!resultado.ok) {
+      setMensaje(resultado.mensaje)
+      return
+    }
+
+    setMonto('')
+    setErrores({})
+    setMensajeExito(`Abono de ${formatearDolares(validacion.datos.monto)} registrado.`)
   }
 
   return (
     <form className="flex flex-col gap-5" noValidate onSubmit={enviar}>
       <div className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:max-w-3xl lg:p-8">
         <h2 className="break-words font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
-          {editando ? 'Editar abono' : `Abono de ${cliente.codigo}`}
+          {titulo ?? (editando ? 'Editar abono' : `Abono de ${cliente.codigo}`)}
         </h2>
 
         <div className="grid gap-5 lg:grid-cols-2">
@@ -93,6 +108,7 @@ export function FormularioAbono({
               setMonto(evento.target.value)
               setErrores((actual) => ({ ...actual, monto: undefined }))
               setMensaje(null)
+              setMensajeExito(null)
             }}
             className={campo}
           />
@@ -118,6 +134,7 @@ export function FormularioAbono({
               setFecha(evento.target.value)
               setErrores((actual) => ({ ...actual, fecha: undefined }))
               setMensaje(null)
+              setMensajeExito(null)
             }}
             className={campo}
           />
@@ -130,6 +147,7 @@ export function FormularioAbono({
         </div>
 
         {mensaje ? <Aviso>{mensaje}</Aviso> : null}
+        {mensajeExito ? <Aviso tono="ok">{mensajeExito}</Aviso> : null}
 
         <button
           type="submit"

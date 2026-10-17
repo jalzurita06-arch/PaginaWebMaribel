@@ -4,11 +4,20 @@ import { Minus, Plus, Shirt, ShoppingBasket } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { EtiquetaEstado } from '../components/EtiquetaEstado.tsx'
+import { FormularioAbono } from '../components/FormularioAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
-import { CLAVE_CLIENTES, CLAVE_PRECIOS, claveCanastaCliente, guardarCache, leerCache, pedirDatos } from '../lib/cacheLectura.ts'
+import {
+  CLAVE_CLIENTES,
+  CLAVE_PRECIOS,
+  claveCanastaCliente,
+  guardarCache,
+  leerCache,
+  olvidarDatosGuardados,
+  pedirDatos,
+} from '../lib/cacheLectura.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
 import { codificarVenta } from '../lib/compartir.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
@@ -25,7 +34,14 @@ import {
   obtenerCanasta,
   type FilaCanasta,
 } from '../services/canasta.ts'
-import { listarClientes, obtenerCliente, type Cliente, type ClienteVenta } from '../services/clientes.ts'
+import {
+  agregarAbono,
+  listarClientes,
+  obtenerCliente,
+  type Cliente,
+  type ClienteVenta,
+  type Resultado,
+} from '../services/clientes.ts'
 import { listarPrecios, type Precio } from '../services/precios.ts'
 
 type Paso = 'buscar' | 'prendas' | 'resumen' | 'confirmado'
@@ -108,6 +124,7 @@ export function Venta() {
   const [cargandoCanasta, setCargandoCanasta] = useState(false)
   const [errorCanasta, setErrorCanasta] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
+  const [guardandoAbono, setGuardandoAbono] = useState(false)
   const [restaurando, setRestaurando] = useState(() => leerMenuVenta() != null)
 
   useEffect(() => {
@@ -188,7 +205,7 @@ export function Venta() {
         linea.id === existente.id ? { ...linea, cantidad: siguiente } : linea,
       )
     })
-    setTextoCantidad('')
+    setTextoCantidad('1')
   }
 
   function quitarLinea(id: string) {
@@ -264,6 +281,18 @@ export function Venta() {
     setPrecioElegido(null)
     setTextoCantidad('')
     setPaso('confirmado')
+  }
+
+  async function guardarAbono(monto: number, fecha: string): Promise<Resultado<Cliente>> {
+    if (!cliente) return { ok: false, mensaje: 'No hay cliente seleccionado.' }
+    setGuardandoAbono(true)
+    const resultado = await agregarAbono(cliente.id, monto, fecha)
+    setGuardandoAbono(false)
+    if (!resultado.ok) return resultado
+
+    setCliente(resultado.datos)
+    olvidarDatosGuardados()
+    return resultado
   }
 
   function registrarOtraVenta() {
@@ -361,7 +390,7 @@ export function Venta() {
               }}
               onElegirPrecio={(valor) => {
                 setPrecioElegido(valor)
-                setTextoCantidad('')
+                setTextoCantidad('1')
               }}
               onCantidad={setTextoCantidad}
               onAgregar={agregarLinea}
@@ -375,12 +404,14 @@ export function Venta() {
           {paso === 'resumen' && cliente ? (
             <PasoResumen
               cliente={cliente}
+              acento={acento}
               grupos={grupos}
               totalVenta={totalVenta}
               totalCanastaCliente={totalCanastaCliente}
               cargandoCanasta={cargandoCanasta}
               errorCanasta={errorCanasta}
               guardando={guardando}
+              guardandoAbono={guardandoAbono}
               enLinea={enLinea}
               onAtras={() => {
                 setAviso(null)
@@ -388,6 +419,7 @@ export function Venta() {
               }}
               onConfirmar={() => void confirmar()}
               onReintentarCanasta={() => void cargarCanasta(cliente.id)}
+              onGuardarAbono={guardarAbono}
             />
           ) : null}
 
@@ -811,85 +843,108 @@ function PasoPrendas({
 
 function PasoResumen({
   cliente,
+  acento,
   grupos,
   totalVenta,
   totalCanastaCliente,
   cargandoCanasta,
   errorCanasta,
   guardando,
+  guardandoAbono,
   enLinea,
   onAtras,
   onConfirmar,
   onReintentarCanasta,
+  onGuardarAbono,
 }: {
   cliente: Cliente
+  acento: string
   grupos: GrupoPrecio[]
   totalVenta: number
   totalCanastaCliente: number | null
   cargandoCanasta: boolean
   errorCanasta: string | null
   guardando: boolean
+  guardandoAbono: boolean
   enLinea: boolean
   onAtras: () => void
   onConfirmar: () => void
   onReintentarCanasta: () => void
+  onGuardarAbono: (monto: number, fecha: string) => Promise<Resultado<Cliente>>
 }) {
   return (
     <div className="flex flex-col gap-5">
       <FichaCliente cliente={cliente} />
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start lg:gap-8">
-      <section className="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm lg:p-8">
-        <h3 className="text-base">Prendas</h3>
-        <ul className="flex flex-col gap-3">
-          {grupos.map((grupo) => (
-            <li key={grupo.precio} className="flex items-baseline justify-between gap-3">
-              <span>
-                {formatearDolares(grupo.precio)} × {grupo.cantidad}
-              </span>
-              <span>{formatearDolares(grupo.subtotal)}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="flex items-baseline justify-between gap-3">
-          <span>Total de la venta</span>
-          <span className="font-display text-3xl leading-none tracking-wide">{formatearDolares(totalVenta)}</span>
-        </p>
-        <div className="flex flex-col gap-2">
-          <p className="flex items-baseline justify-between gap-3">
-            <span>Total de la canasta</span>
-            <span className="font-display text-3xl leading-none tracking-wide">
-              {cargandoCanasta || totalCanastaCliente == null ? '—' : formatearDolares(totalCanastaCliente)}
-            </span>
-          </p>
-          {cargandoCanasta ? <IndicadorCarga>Cargando canasta…</IndicadorCarga> : null}
-          {errorCanasta ? (
-            <div className="flex flex-col gap-3">
-              <Aviso>{errorCanasta}</Aviso>
-              <button type="button" onClick={onReintentarCanasta} className={`${boton} bg-black/5`}>
-                Reintentar
-              </button>
-            </div>
-          ) : null}
-          {!cargandoCanasta && !errorCanasta ? (
-            <p className="text-sm leading-relaxed text-black/60">
-              Incluye lo que ya tenía y esta venta.
+        <div className="flex flex-col gap-5">
+          <section className="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm lg:p-8">
+            <h3 className="text-base">Prendas</h3>
+            <ul className="flex flex-col gap-3">
+              {grupos.map((grupo) => (
+                <li key={grupo.precio} className="flex items-baseline justify-between gap-3">
+                  <span>
+                    {formatearDolares(grupo.precio)} × {grupo.cantidad}
+                  </span>
+                  <span>{formatearDolares(grupo.subtotal)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="flex items-baseline justify-between gap-3">
+              <span>Total de la venta</span>
+              <span className="font-display text-3xl leading-none tracking-wide">{formatearDolares(totalVenta)}</span>
             </p>
-          ) : null}
+            <div className="flex flex-col gap-2">
+              <p className="flex items-baseline justify-between gap-3">
+                <span>Total de la canasta</span>
+                <span className="font-display text-3xl leading-none tracking-wide">
+                  {cargandoCanasta || totalCanastaCliente == null ? '—' : formatearDolares(totalCanastaCliente)}
+                </span>
+              </p>
+              {cargandoCanasta ? <IndicadorCarga>Cargando canasta…</IndicadorCarga> : null}
+              {errorCanasta ? (
+                <div className="flex flex-col gap-3">
+                  <Aviso>{errorCanasta}</Aviso>
+                  <button type="button" onClick={onReintentarCanasta} className={`${boton} bg-black/5`}>
+                    Reintentar
+                  </button>
+                </div>
+              ) : null}
+              {!cargandoCanasta && !errorCanasta ? (
+                <p className="text-sm leading-relaxed text-black/60">
+                  Incluye lo que ya tenía y esta venta.
+                </p>
+              ) : null}
+            </div>
+          </section>
+
+          <FormularioAbono
+            cliente={cliente}
+            acento={acento}
+            titulo="Agregar abono"
+            guardando={guardandoAbono}
+            autoFocus={false}
+            onGuardar={onGuardarAbono}
+          />
         </div>
-      </section>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-        <button type="button" onClick={onAtras} disabled={guardando} className={`${boton} bg-black/5`}>
-          Atrás
-        </button>
-        <button
-          type="button"
-          onClick={onConfirmar}
-          disabled={guardando || grupos.length === 0 || !enLinea}
-          className={`${boton} bg-black text-white`}
-        >
-          {guardando ? 'Guardando…' : 'Confirmar'}
-        </button>
-      </div>
+
+        <div className="grid grid-cols-2 gap-3 lg:sticky lg:top-8 lg:grid-cols-1">
+          <button
+            type="button"
+            onClick={onAtras}
+            disabled={guardando || guardandoAbono}
+            className={`${boton} bg-black/5`}
+          >
+            Atrás
+          </button>
+          <button
+            type="button"
+            onClick={onConfirmar}
+            disabled={guardando || guardandoAbono || grupos.length === 0 || !enLinea}
+            className={`${boton} bg-black text-white`}
+          >
+            {guardando ? 'Guardando…' : 'Confirmar'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -1029,16 +1084,33 @@ function ListaTemporal({
   onCambiarCantidad: (id: string, delta: number) => void
 }) {
   const [editandoId, setEditandoId] = useState<string | null>(null)
+  const totalPrendas = lineas.reduce((acc, linea) => acc + linea.cantidad, 0)
 
   if (lineas.length === 0) {
     return (
-      <p className="rounded-3xl bg-white px-5 py-8 text-center shadow-sm">Todavía no agregas prendas.</p>
+      <section className="flex flex-col gap-3 rounded-3xl bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-base">En esta venta</h3>
+          <span className="rounded-full bg-black/5 px-3 py-1 text-sm font-semibold tabular-nums text-black/70">
+            0 prendas
+          </span>
+        </div>
+        <p className="py-4 text-center text-sm text-black/60">Todavía no agregas prendas.</p>
+      </section>
     )
   }
 
   return (
     <section className="flex flex-col gap-3 rounded-3xl bg-white p-5 shadow-sm">
-      <h3 className="text-base">En esta venta</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-base">En esta venta</h3>
+        <span className="rounded-full bg-black/5 px-3 py-1 text-sm font-semibold tabular-nums text-black/70">
+          <NumeroAnimado
+            valor={totalPrendas}
+            texto={`${totalPrendas} ${totalPrendas === 1 ? 'prenda' : 'prendas'}`}
+          />
+        </span>
+      </div>
       <ul className="flex flex-col gap-3">
         {lineas.map((linea) => {
           const subtotalLinea = totalCanasta([linea])
