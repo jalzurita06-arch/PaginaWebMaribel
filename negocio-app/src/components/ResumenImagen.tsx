@@ -31,7 +31,16 @@ const caja: CSSProperties = {
   fontVariantNumeric: 'tabular-nums',
 }
 
-export function ResumenImagen({ codigo, nombre, fecha, grupos, abono, saldo, total, concepto }: Props) {
+export function ResumenImagen({
+  codigo,
+  nombre,
+  fecha,
+  grupos,
+  abono,
+  saldo,
+  total,
+  concepto,
+}: Props) {
   return (
     <article
       style={{
@@ -85,7 +94,7 @@ export function ResumenImagen({ codigo, nombre, fecha, grupos, abono, saldo, tot
         <p style={{ ...caja, fontSize: 15 }}>Sin prendas</p>
       ) : (
         <div style={caja}>
-          <Fila prendas="Prendas" precio="Precio" subtotal="Subtotal" encabezado />
+          <Fila prendas="Cant. prendas" precio="Precio" subtotal="Subtotal" encabezado />
           {grupos.map((grupo) => (
             <Fila
               key={grupo.precio}
@@ -99,9 +108,15 @@ export function ResumenImagen({ codigo, nombre, fecha, grupos, abono, saldo, tot
 
       <Regla />
 
-      <Linea etiqueta="Total de la canasta" valor={formatearDolares(total)} />
-      <Linea etiqueta="Abonado" valor={formatearDolares(abono)} />
-      <Linea etiqueta="Saldo pendiente" valor={formatearDolares(saldo)} fuerte />
+      {concepto ? (
+        <Linea etiqueta="Total de esta venta" valor={formatearDolares(total)} fuerte />
+      ) : (
+        <>
+          <Linea etiqueta="Total de la canasta" valor={formatearDolares(total)} />
+          <Linea etiqueta="Abonado" valor={formatearDolares(abono)} />
+          <Linea etiqueta="Saldo pendiente" valor={formatearDolares(saldo)} fuerte />
+        </>
+      )}
     </article>
   )
 }

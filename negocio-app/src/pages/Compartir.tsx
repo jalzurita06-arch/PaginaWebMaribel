@@ -60,6 +60,15 @@ export function Compartir() {
 
     void (async () => {
       if (textoVenta != null) {
+        const venta = leerVenta(textoVenta)
+        if (!venta) {
+          setCliente(null)
+          setItems([])
+          setError('No se pudo leer esta venta.')
+          setCargando(false)
+          return
+        }
+
         const resultadoCliente = await obtenerCliente(clienteId)
         if (!vigente) return
         if (!resultadoCliente.ok) {
@@ -69,14 +78,7 @@ export function Compartir() {
           setCargando(false)
           return
         }
-        const venta = leerVenta(textoVenta)
         setCliente(resultadoCliente.datos)
-        if (!venta) {
-          setItems([])
-          setError('No se pudo leer esta venta.')
-          setCargando(false)
-          return
-        }
         setItems(venta)
         setError(null)
         setCargando(false)
@@ -186,7 +188,13 @@ export function Compartir() {
       }
 
       // En PC se copia la imagen con esta pestaña al frente. El chat se abre después.
-      const resultado = await compartirEnComputadora(cliente.id, archivo, venta, imagenLista, setAviso)
+      const resultado = await compartirEnComputadora(
+        cliente.id,
+        archivo,
+        venta,
+        imagenLista,
+        setAviso,
+      )
       if (!resultado.ok) return
 
       const chat = abrirWhatsAppDeCliente(cliente, negocio, negocio.telefonoPrefijo)
@@ -246,10 +254,16 @@ export function Compartir() {
           </div>
 
           <div className="flex flex-col gap-5">
-            <dl className="grid grid-cols-3 gap-2">
-              <Monto etiqueta="Total" valor={resumen.total} />
-              <Monto etiqueta="Abonado" valor={resumen.abono} />
-              <Monto etiqueta="Saldo" valor={resumen.saldo} />
+            <dl className={`grid gap-3 ${esVenta ? 'grid-cols-1' : 'grid-cols-3'}`}>
+              {esVenta ? (
+                <Monto etiqueta="Total de esta venta" valor={resumen.total} />
+              ) : (
+                <>
+                  <Monto etiqueta="Total" valor={resumen.total} />
+                  <Monto etiqueta="Abonado" valor={resumen.abono} />
+                  <Monto etiqueta="Saldo" valor={resumen.saldo} />
+                </>
+              )}
             </dl>
 
             {!telefono ? (

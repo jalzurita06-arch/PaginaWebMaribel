@@ -50,7 +50,7 @@ Si hay skills instaladas para este proyecto, léelas antes de escribir código y
 9. Historial de envíos: se conservan solo los últimos 7 días. Al abrir la pantalla Canasta se borran los envíos con más de 7 días. El historial muestra la lista de envíos y, arriba, el total generado y el total de prendas de esa semana.
 10. Eliminar cliente: borra el cliente y todo lo ligado a él (canasta, abonos y envíos). Si tiene canasta activa, primero muestra su detalle y pide confirmar.
 11. "Bloqueado" del brief no es un estado: significa eliminar. En la app solo existen activo e inactivo.
-12. Compartir (imagen o texto): no cambia ningún dato. Siempre muestra la canasta completa del cliente: prendas agrupadas por precio, abono (saldo_favor actual), saldo (regla 7) y total.
+12. Compartir (imagen o texto): no cambia ningún dato. Al compartir la canasta completa, muestra sus prendas agrupadas por precio, el abono (saldo_favor actual), el saldo pendiente (regla 7) y el total. Al compartir solo la venta actual, muestra únicamente las prendas compradas en esa venta y la suma de esas prendas. En el documento compartido, la cantidad se etiqueta "Cant. prendas".
 13. El estado "Bodega" no se guarda en la base de datos. Significa que la canasta todavía no se ha enviado.
 
 ## Modelo de datos (ya creado en Supabase)
