@@ -570,7 +570,7 @@ function FilaCanasta({
         </span>
         <span className="mt-4 grid grid-cols-3 gap-2">
           <Monto etiqueta="Total" valor={canasta.total} />
-          <Monto etiqueta="Abono" valor={canasta.saldoFavor} />
+          <Monto etiqueta="Abonado" valor={canasta.saldoFavor} />
           <Monto etiqueta="Saldo" valor={canasta.saldo} />
         </span>
       </button>

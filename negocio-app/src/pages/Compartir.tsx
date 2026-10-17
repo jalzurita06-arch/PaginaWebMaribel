@@ -247,9 +247,9 @@ export function Compartir() {
 
           <div className="flex flex-col gap-5">
             <dl className="grid grid-cols-3 gap-2">
-              <Monto etiqueta="Abono" valor={resumen.abono} />
-              <Monto etiqueta="Saldo" valor={resumen.saldo} />
               <Monto etiqueta="Total" valor={resumen.total} />
+              <Monto etiqueta="Abonado" valor={resumen.abono} />
+              <Monto etiqueta="Saldo" valor={resumen.saldo} />
             </dl>
 
             {!telefono ? (

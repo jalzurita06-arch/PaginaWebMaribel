@@ -442,8 +442,8 @@ function Buscador({
               </span>
               <span className="grid grid-cols-3 gap-2">
                 <Cifra etiqueta="Total" valor={cliente.total} />
-                <Cifra etiqueta="Saldo" valor={cliente.saldo} />
                 <Cifra etiqueta="Abonado" valor={cliente.saldo_favor} />
+                <Cifra etiqueta="Saldo" valor={cliente.saldo} />
               </span>
             </motion.button>
           </li>
