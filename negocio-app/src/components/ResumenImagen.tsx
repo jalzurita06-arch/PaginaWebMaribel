@@ -99,9 +99,9 @@ export function ResumenImagen({ codigo, nombre, fecha, grupos, abono, saldo, tot
 
       <Regla />
 
+      <Linea etiqueta="Total de la canasta" valor={formatearDolares(total)} />
       <Linea etiqueta="Abonado" valor={formatearDolares(abono)} />
-      <Linea etiqueta="Saldo" valor={formatearDolares(saldo)} />
-      <Linea etiqueta="Total" valor={formatearDolares(total)} fuerte />
+      <Linea etiqueta="Saldo pendiente" valor={formatearDolares(saldo)} fuerte />
     </article>
   )
 }
