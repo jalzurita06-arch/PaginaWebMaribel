@@ -1,12 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { CampanaAbono } from '../components/CampanaAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
+import { PanelEditarPedido, type PedidoAEditar } from '../components/PanelEditarPedido.tsx'
 import { FilaTablaDesplegable, PanelDesplegable, transicionDesplegar } from '../components/PanelDesplegable.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
@@ -127,6 +128,17 @@ export function Canasta() {
   const [enviandoId, setEnviandoId] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [orden, setOrden] = useState<OrdenCanasta>('codigo')
+  const [pedidoEdicion, setPedidoEdicion] = useState<PedidoAEditar | null>(null)
+
+  function abrirEdicionPedido(canasta: CanastaAbierta, dia: GrupoDia) {
+    setPedidoEdicion({
+      clienteId: canasta.clienteId,
+      clienteCodigo: canasta.codigo,
+      clienteNombre: canasta.nombre,
+      fecha: dia.fecha,
+      grupos: dia.grupos,
+    })
+  }
 
   useEffect(() => {
     montado.current = true
@@ -379,6 +391,7 @@ export function Canasta() {
                 setSelector((actual) => (actual?.clienteId === id ? { ...actual, tipo } : actual))
               }
               onConfirmar={(canasta, tipo) => void confirmarEnvio(canasta, tipo)}
+              onEditarPedido={abrirEdicionPedido}
             />
           ) : null}
 
@@ -411,6 +424,7 @@ export function Canasta() {
                     )
                   }
                   onConfirmar={(tipo) => void confirmarEnvio(canasta, tipo)}
+                  onEditarPedido={(dia) => abrirEdicionPedido(canasta, dia)}
                 />
               ))}
             </ul>
@@ -431,6 +445,17 @@ export function Canasta() {
           onReintentar={() => setRecarga((valor) => valor + 1)}
         />
       )}
+
+      <PanelEditarPedido
+        pedido={pedidoEdicion}
+        abierto={pedidoEdicion != null}
+        onCerrar={() => setPedidoEdicion(null)}
+        onGuardado={() => {
+          setPedidoEdicion(null)
+          setAviso({ texto: 'Pedido actualizado correctamente.', tono: 'ok' })
+          setRecarga((valor) => valor + 1)
+        }}
+      />
     </Layout>
   )
 }
@@ -499,6 +524,7 @@ function FilaCanasta({
   onEnviado,
   onElegirTipo,
   onConfirmar,
+  onEditarPedido,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -514,6 +540,7 @@ function FilaCanasta({
   onEnviado: () => void
   onElegirTipo: (tipo: TipoEnvio) => void
   onConfirmar: (tipo: TipoEnvio) => void
+  onEditarPedido?: (dia: GrupoDia) => void
 }) {
   const detalleId = useId()
 
@@ -550,7 +577,13 @@ function FilaCanasta({
 
       <PanelDesplegable abierto={abierta}>
         <div className="pt-4">
-          <DetalleCanasta id={detalleId} grupos={canasta.grupos} dias={canasta.dias} abonos={abonos} />
+          <DetalleCanasta
+            id={detalleId}
+            grupos={canasta.grupos}
+            dias={canasta.dias}
+            abonos={abonos}
+            onEditarPedido={onEditarPedido}
+          />
         </div>
       </PanelDesplegable>
 
@@ -587,6 +620,7 @@ function TablaCanastas({
   onEnviado,
   onElegirTipo,
   onConfirmar,
+  onEditarPedido,
 }: {
   canastas: CanastaAbierta[]
   acento: string
@@ -602,6 +636,7 @@ function TablaCanastas({
   onEnviado: (id: string) => void
   onElegirTipo: (id: string, tipo: TipoEnvio) => void
   onConfirmar: (canasta: CanastaAbierta, tipo: TipoEnvio) => void
+  onEditarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
 }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
@@ -658,6 +693,7 @@ function TablaCanastas({
                   onEnviado={() => onEnviado(canasta.clienteId)}
                   onElegirTipo={(tipo) => onElegirTipo(canasta.clienteId, tipo)}
                   onConfirmar={(tipo) => onConfirmar(canasta, tipo)}
+                  onEditarPedido={(dia) => onEditarPedido?.(canasta, dia)}
                 />
               )
             })}
@@ -683,6 +719,7 @@ function FilasTabla({
   onEnviado,
   onElegirTipo,
   onConfirmar,
+  onEditarPedido,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -698,6 +735,7 @@ function FilasTabla({
   onEnviado: () => void
   onElegirTipo: (tipo: TipoEnvio) => void
   onConfirmar: (tipo: TipoEnvio) => void
+  onEditarPedido?: (dia: GrupoDia) => void
 }) {
   const detalleId = useId()
 
@@ -760,6 +798,7 @@ function FilasTabla({
             dias={canasta.dias}
             abonos={abonos}
             holgado
+            onEditarPedido={onEditarPedido}
           />
         </div>
       </FilaTablaDesplegable>
@@ -773,12 +812,14 @@ function DetalleCanasta({
   dias,
   abonos,
   holgado = false,
+  onEditarPedido,
 }: {
   id: string
   grupos: GrupoPrecio[]
   dias: GrupoDia[]
   abonos: Abono[] | null
   holgado?: boolean
+  onEditarPedido?: (dia: GrupoDia) => void
 }) {
   return (
     <div
@@ -790,7 +831,7 @@ function DetalleCanasta({
       }
     >
       <div className={holgado ? 'min-w-0 pr-6' : 'min-w-0 pr-3'}>
-        <ListaPrendas grupos={grupos} dias={dias} apretado={!holgado} />
+        <ListaPrendas grupos={grupos} dias={dias} apretado={!holgado} onEditarPedido={onEditarPedido} />
       </div>
       <div
         className={
@@ -841,11 +882,13 @@ function ListaPrendas({
   grupos,
   dias = [],
   apretado = false,
+  onEditarPedido,
 }: {
   id?: string
   grupos: GrupoPrecio[]
   dias?: GrupoDia[]
   apretado?: boolean
+  onEditarPedido?: (dia: GrupoDia) => void
 }) {
   const internoId = useId()
   const tituloId = `${id ?? internoId}-titulo`
@@ -865,10 +908,26 @@ function ListaPrendas({
         <ul className={`flex flex-col ${apretado ? 'gap-3' : 'gap-3.5'}`}>
           {porDia.map((dia) => (
             <li key={dia.fecha || 'sin-fecha'} className={`flex flex-col ${apretado ? 'gap-1.5' : 'gap-1'}`}>
-              <h4 className="text-sm text-black/60">
-                {dia.fecha ? textoFecha(dia.fecha) : 'Sin fecha'}
-                {apretado ? ` · ${dia.prendas}` : ` · ${textoCantidad(dia.prendas)}`}
-              </h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm text-black/60">
+                  {dia.fecha ? textoFecha(dia.fecha) : 'Sin fecha'}
+                  {apretado ? ` · ${dia.prendas}` : ` · ${textoCantidad(dia.prendas)}`}
+                </h4>
+                {onEditarPedido && dia.fecha ? (
+                  <button
+                    type="button"
+                    aria-label={`Editar pedido del ${textoFecha(dia.fecha)}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onEditarPedido(dia)
+                    }}
+                    className="inline-flex size-6 shrink-0 touch-manipulation items-center justify-center rounded-full bg-black/5 text-black hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                    title="Editar prendas de este pedido"
+                  >
+                    <Pencil size={12} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
               <ul className={`flex flex-col ${apretado ? 'gap-1.5' : 'gap-1'}`}>
                 {dia.grupos.map((grupo) => (
                   <li key={grupo.precio} className={linea}>

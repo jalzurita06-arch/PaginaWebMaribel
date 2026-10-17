@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { redondear2 } from '../lib/dinero.ts'
-import { puedeVender, type ItemCanasta } from '../lib/reglas.ts'
+import { agruparPorPrecio, fechaDiaLocal, puedeVender, type ItemCanasta } from '../lib/reglas.ts'
 import { supabase } from '../lib/supabase.ts'
 import { obtenerCliente, type Resultado } from './clientes.ts'
 
@@ -122,6 +122,99 @@ export async function agregarItemsCanasta(
     return { ok: true, datos: preparados.datos }
   } catch (error) {
     return { ok: false, mensaje: mensajeErrorCanasta(error, 'guardar el pedido') }
+  }
+}
+
+/**
+ * Modifica, quita o añade prendas de un pedido en una fecha específica.
+ * Si itemsNuevos está vacío, se eliminan todas las prendas de esa fecha.
+ * Si la canasta del cliente queda totalmente vacía y no tiene saldo a favor,
+ * pasa a inactivo según las reglas de negocio.
+ */
+export async function editarPedidoFecha(
+  clienteId: string,
+  fecha: string,
+  itemsNuevos: ItemCanasta[],
+): Promise<Resultado<ItemCanasta[]>> {
+  const db = preparar()
+  if (esFallo(db)) return db
+  if (!clienteId.trim()) return { ok: false, mensaje: 'No se encontró el cliente.' }
+
+  const fechaLimpia = fecha.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaLimpia)) {
+    return { ok: false, mensaje: 'Fecha de pedido no válida.' }
+  }
+
+  const preparados =
+    itemsNuevos.length > 0
+      ? prepararItemsCanasta(itemsNuevos)
+      : { ok: true as const, datos: [] as ItemCanasta[] }
+  if (!preparados.ok) return preparados
+
+  const agrupados = agruparPorPrecio(preparados.datos)
+
+  try {
+    const cliente = await obtenerCliente(clienteId)
+    if (!cliente.ok) return cliente
+
+    // 1. Cargar las filas actuales de este cliente con su fecha
+    const { data, error } = await db
+      .from('canasta_items')
+      .select('id, precio, cantidad, created_at')
+      .eq('cliente_id', clienteId)
+
+    if (error) return { ok: false, mensaje: mensajeErrorCanasta(error, 'cargar el pedido') }
+
+    const filas = Array.isArray(data) ? (data as Array<{ id: string; created_at: string }>) : []
+    const itemsDeFecha = filas.filter((fila) => {
+      if (typeof fila.created_at !== 'string') return false
+      return fechaDiaLocal(fila.created_at) === fechaLimpia
+    })
+
+    const idsParaBorrar = itemsDeFecha.map((f) => f.id)
+    const fechaOriginal = itemsDeFecha[0]?.created_at ?? `${fechaLimpia}T12:00:00-05:00`
+
+    // 2. Si había items en esa fecha, borrarlos
+    if (idsParaBorrar.length > 0) {
+      const { error: errorDelete } = await db
+        .from('canasta_items')
+        .delete()
+        .in('id', idsParaBorrar)
+
+      if (errorDelete) {
+        return { ok: false, mensaje: mensajeErrorCanasta(errorDelete, 'actualizar el pedido') }
+      }
+    }
+
+    // 3. Insertar las prendas nuevas/modificadas conservando la fecha original
+    if (agrupados.length > 0) {
+      const nuevasFilas = agrupados.map((item) => ({
+        cliente_id: clienteId,
+        precio: item.precio,
+        cantidad: item.cantidad,
+        created_at: fechaOriginal,
+      }))
+
+      const { error: errorInsert } = await db.from('canasta_items').insert(nuevasFilas)
+      if (errorInsert) {
+        return { ok: false, mensaje: mensajeErrorCanasta(errorInsert, 'guardar prendas actualizadas') }
+      }
+    }
+
+    // 4. Si la canasta quedó totalmente vacía y no tiene saldo a favor, pasa a inactivo
+    const itemsOtrasFechas = filas.filter((f) => !idsParaBorrar.includes(f.id))
+    const canastaVacia = itemsOtrasFechas.length === 0 && agrupados.length === 0
+
+    if (canastaVacia && cliente.datos.saldo_favor <= 0 && cliente.datos.estado === 'activo') {
+      await db.from('clientes').update({ estado: 'inactivo' }).eq('id', clienteId)
+    }
+
+    return {
+      ok: true,
+      datos: agrupados.map((g) => ({ precio: g.precio, cantidad: g.cantidad })),
+    }
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorCanasta(error, 'actualizar el pedido') }
   }
 }
 

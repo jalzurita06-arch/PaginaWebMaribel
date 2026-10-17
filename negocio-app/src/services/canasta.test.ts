@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  editarPedidoFecha,
   leerCantidadEntera,
   mensajeErrorCanasta,
   prepararItemsCanasta,
@@ -67,5 +68,28 @@ describe('mensajeErrorCanasta', () => {
     expect(mensajeErrorCanasta({ code: 'XX000', message: 'otro' }, 'guardar el pedido')).toBe(
       'No se pudo guardar el pedido. Inténtalo de nuevo.',
     )
+  })
+})
+
+describe('editarPedidoFecha', () => {
+  it('valida que el id del cliente no esté vacío', async () => {
+    const res = await editarPedidoFecha('', '2026-10-17', [])
+    expect(res).toEqual({ ok: false, mensaje: 'No se encontró el cliente.' })
+  })
+
+  it('valida el formato de la fecha', async () => {
+    const res = await editarPedidoFecha('cli-1', '17-10-2026', [])
+    expect(res).toEqual({ ok: false, mensaje: 'Fecha de pedido no válida.' })
+  })
+
+  it('valida que las prendas tengan precio mayor a 0 y cantidad entera', async () => {
+    const resPrecio = await editarPedidoFecha('cli-1', '2026-10-17', [{ precio: 0, cantidad: 1 }])
+    expect(resPrecio.ok).toBe(false)
+
+    const resCant = await editarPedidoFecha('cli-1', '2026-10-17', [{ precio: 5, cantidad: 1.5 }])
+    expect(resCant).toEqual({
+      ok: false,
+      mensaje: 'La cantidad debe ser un entero mayor que 0.',
+    })
   })
 })
