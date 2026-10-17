@@ -16,6 +16,11 @@ type Props = {
 
 const papel = '#ffffff'
 const tinta = '#000000'
+const textoAcento = '#49331F'
+const textoIdentidad = '#49331F'
+const fondoAcento = '#FBF3E7'
+const textoVenta = '#A64E56'
+const fondoVenta = '#FDF0F0'
 
 const caja: CSSProperties = {
   boxSizing: 'border-box',
@@ -67,6 +72,7 @@ export function ResumenImagen({
           <p
             style={{
               ...caja,
+              color: textoIdentidad,
               marginTop: 16,
               fontSize: 26,
               fontWeight: 600,
@@ -78,9 +84,21 @@ export function ResumenImagen({
             {codigo}
           </p>
           {nombre ? (
-            <p style={{ ...caja, marginTop: 6, fontSize: 16, wordBreak: 'break-word' }}>{nombre}</p>
+            <p
+              style={{
+                ...caja,
+                color: textoIdentidad,
+                marginTop: 6,
+                fontSize: 16,
+                wordBreak: 'break-word',
+              }}
+            >
+              {nombre}
+            </p>
           ) : null}
-          {concepto ? <p style={{ ...caja, marginTop: 8, fontSize: 14 }}>{concepto}</p> : null}
+          {concepto ? (
+            <p style={{ ...caja, color: textoAcento, marginTop: 8, fontSize: 14 }}>{concepto}</p>
+          ) : null}
         </div>
         <LogoMarca
           variante="completo"
@@ -109,12 +127,23 @@ export function ResumenImagen({
       <Regla />
 
       {concepto ? (
-        <Linea etiqueta="Total de esta canasta" valor={formatearDolares(total)} fuerte />
+        <Linea
+          etiqueta="Total de esta canasta"
+          valor={formatearDolares(total)}
+          fuerte
+          resaltado
+        />
       ) : (
         <>
           <Linea etiqueta="Total de la canasta" valor={formatearDolares(total)} />
           <Linea etiqueta="Abonado" valor={formatearDolares(abono)} />
-          <Linea etiqueta="Saldo pendiente" valor={formatearDolares(saldo)} fuerte />
+          <Linea
+            etiqueta="Saldo pendiente"
+            valor={formatearDolares(saldo)}
+            fuerte
+            resaltado
+            colorVenta
+          />
         </>
       )}
     </article>
@@ -148,14 +177,30 @@ function Fila({
         fontWeight: encabezado ? 600 : 400,
       }}
     >
-      <span style={caja}>{prendas}</span>
-      <span style={{ ...caja, textAlign: 'right' }}>{precio}</span>
-      <span style={{ ...caja, textAlign: 'right' }}>{subtotal}</span>
+      <span style={{ ...caja, color: encabezado ? textoAcento : tinta }}>{prendas}</span>
+      <span style={{ ...caja, color: encabezado ? textoAcento : tinta, textAlign: 'right' }}>
+        {precio}
+      </span>
+      <span style={{ ...caja, color: encabezado ? textoAcento : tinta, textAlign: 'right' }}>
+        {subtotal}
+      </span>
     </div>
   )
 }
 
-function Linea({ etiqueta, valor, fuerte = false }: { etiqueta: string; valor: string; fuerte?: boolean }) {
+function Linea({
+  etiqueta,
+  valor,
+  fuerte = false,
+  resaltado = false,
+  colorVenta = false,
+}: {
+  etiqueta: string
+  valor: string
+  fuerte?: boolean
+  resaltado?: boolean
+  colorVenta?: boolean
+}) {
   return (
     <div
       style={{
@@ -163,13 +208,20 @@ function Linea({ etiqueta, valor, fuerte = false }: { etiqueta: string; valor: s
         display: 'flex',
         justifyContent: 'space-between',
         gap: 12,
-        marginTop: fuerte ? 10 : 6,
+        marginTop: resaltado ? 12 : fuerte ? 10 : 6,
+        padding: resaltado ? '10px 12px' : 0,
+        borderRadius: resaltado ? 10 : 0,
+        backgroundColor: resaltado ? (colorVenta ? fondoVenta : fondoAcento) : 'transparent',
         fontSize: fuerte ? 18 : 15,
-        fontWeight: fuerte ? 600 : 400,
+        fontWeight: resaltado ? 700 : fuerte ? 600 : 400,
       }}
     >
-      <span style={caja}>{etiqueta}</span>
-      <span style={caja}>{valor}</span>
+      <span style={{ ...caja, color: colorVenta ? textoVenta : resaltado ? textoAcento : tinta }}>
+        {etiqueta}
+      </span>
+      <span style={{ ...caja, color: colorVenta ? textoVenta : resaltado ? textoAcento : tinta }}>
+        {valor}
+      </span>
     </div>
   )
 }

@@ -83,6 +83,8 @@ export function PanelEditarPedido({
 
   const totalPrendas = lineas.reduce((acc, l) => acc + l.cantidad, 0)
   const totalMonto = redondear2(lineas.reduce((acc, l) => acc + l.precio * l.cantidad, 0))
+  const gruposOrdenados = [...agruparPorPrecio(lineas)].sort((a, b) => a.precio - b.precio)
+  const preciosOrdenados = [...(catalogoPrecios ?? [])].sort((a, b) => a.valor - b.valor)
 
   function cambiarCantidad(precio: number, delta: number) {
     setLineas((prev) => {
@@ -214,7 +216,7 @@ export function PanelEditarPedido({
                   </div>
                 ) : (
                   <ul className="flex flex-col gap-2.5">
-                    {agruparPorPrecio(lineas).map((grupo) => (
+                    {gruposOrdenados.map((grupo) => (
                       <li
                         key={grupo.precio}
                         className="flex items-center justify-between gap-3 rounded-2xl bg-fondo p-3.5"
@@ -278,7 +280,7 @@ export function PanelEditarPedido({
                 {/* Precios rápidos de catálogo */}
                 {catalogoPrecios && catalogoPrecios.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
-                    {catalogoPrecios.map((precio) => (
+                    {preciosOrdenados.map((precio) => (
                       <button
                         key={precio.id}
                         type="button"
