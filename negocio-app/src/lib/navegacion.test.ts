@@ -26,6 +26,7 @@ describe('regreso desde abonos hacia canasta', () => {
   it('desde abonos, sin venir de una canasta, vuelve al inicio', () => {
     expect(destinoVolver('/abonos', new URLSearchParams('cliente=b43'))).toBe('/')
     expect(destinoVolver('/abonos', new URLSearchParams())).toBe('/')
+    expect(destinoVolver('/mensaje', new URLSearchParams())).toBe('/')
   })
 
   it('conserva el regreso de compartir', () => {

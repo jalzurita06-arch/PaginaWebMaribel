@@ -4,12 +4,14 @@ import {
   CLAVE_CLIENTES,
   CLAVE_ENVIOS,
   CLAVE_FECHAS_ABONO,
+  CLAVE_PLANTILLA,
   CLAVE_PRECIOS,
   CLAVE_RESUMEN_ABONOS,
   pedirDatos,
 } from './cacheLectura.ts'
 import { listarFechasAbono, listarAbonosDeClientes, listarClientes, listarResumenAbonos } from '../services/clientes.ts'
 import { listarCanastasAbiertas, listarEnviosSemana } from '../services/envios.ts'
+import { obtenerPlantilla } from '../services/plantilla.ts'
 import { listarPrecios } from '../services/precios.ts'
 
 /**
@@ -32,6 +34,7 @@ export function precargarDatos(lenta: boolean): void {
       )
     },
     () => pedirDatos(CLAVE_ENVIOS, () => listarEnviosSemana()),
+    () => pedirDatos(CLAVE_PLANTILLA, () => obtenerPlantilla()),
   ]
 
   if (lenta) {

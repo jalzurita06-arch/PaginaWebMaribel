@@ -1,4 +1,5 @@
 import { redondear2 } from './dinero.ts'
+import { datosBancariosListos, textoWhatsApp, type PlantillaCompartir } from './plantilla.ts'
 import {
   agruparPorPrecio,
   saldoPendiente,
@@ -6,6 +7,9 @@ import {
   type GrupoPrecio,
   type ItemCanasta,
 } from './reglas.ts'
+
+export { datosBancariosListos, textoWhatsApp } from './plantilla.ts'
+export type { PlantillaCompartir } from './plantilla.ts'
 
 const MESES = [
   'enero',
@@ -21,22 +25,6 @@ const MESES = [
   'noviembre',
   'diciembre',
 ] as const
-
-const SEPARADOR = '\u2501'.repeat(12)
-const FLORES = '\u{1F337}\u{1F495}'
-const CARINO = '\u{1F970}'
-const ICONO_BANCO = '\u{1F3E6}'
-const ICONO_TITULAR = '\u{1F469}\u{200D}\u{1F4BC}'
-const ICONO_CUENTA = '\u{1F4B3}'
-const ICONO_NUMERO = '\u{1F522}'
-
-export type DatosBancarios = {
-  banco: string
-  nombreTitular: string
-  tipoCuenta: string
-  numeroCuenta: string
-  cedula: string
-}
 
 export type ResumenPedido = {
   grupos: GrupoPrecio[]
@@ -58,34 +46,6 @@ export function telefonoConPrefijo(telefono: string, prefijo: string): string {
   if (!sinCero) return ''
   if (prefijoLimpio && sinCero.startsWith(prefijoLimpio)) return sinCero
   return `${prefijoLimpio}${sinCero}`
-}
-
-export function datosBancariosListos(datos: DatosBancarios): boolean {
-  return [datos.banco, datos.nombreTitular, datos.tipoCuenta, datos.numeroCuenta, datos.cedula].every(
-    (valor) => valor.trim() !== '',
-  )
-}
-
-export function textoWhatsApp(
-  cliente: { nombre: string | null; codigo: string },
-  datos: DatosBancarios,
-): string {
-  const codigo = cliente.codigo.trim().toLocaleUpperCase('es')
-  const nombre = cliente.nombre?.trim() ?? ''
-  const saludo = nombre
-    ? `\u00A1Hola! ${nombre}-${codigo} ${FLORES}`
-    : `\u00A1Hola! ${codigo} ${FLORES}`
-
-  return [
-    saludo,
-    `Le hago llegar el detalle de su pedido y el valor pendiente por cancelar. Muchas gracias por su confianza. ${CARINO}`,
-    SEPARADOR,
-    `${ICONO_BANCO} *${datos.banco.trim()}*`,
-    `${ICONO_TITULAR} ${datos.nombreTitular.trim()}`,
-    `${ICONO_CUENTA} ${datos.tipoCuenta.trim()}`,
-    `${ICONO_NUMERO} ${datos.numeroCuenta.trim()}`,
-    `C\u00E9dula : ${datos.cedula.trim()}`,
-  ].join('\n')
 }
 
 export function urlWhatsApp(via: 'celular' | 'web' | 'app', telefono: string, texto: string): string {
@@ -142,12 +102,12 @@ export function abrirChatWhatsApp(
 /** Mismo clic en Venta, Canasta o Compartir: abre o reutiliza el chat. */
 export function abrirWhatsAppDeCliente(
   cliente: { nombre: string | null; codigo: string; telefono: string },
-  datos: DatosBancarios,
+  plantilla: PlantillaCompartir,
   prefijo: string,
 ): { url: string; bloqueada: boolean } {
   const telefono = telefonoConPrefijo(cliente.telefono, prefijo)
-  if (!telefono || !datosBancariosListos(datos)) return { url: '', bloqueada: false }
-  return abrirChatWhatsApp(telefono, textoWhatsApp(cliente, datos), detectarCelular())
+  if (!telefono || !datosBancariosListos(plantilla)) return { url: '', bloqueada: false }
+  return abrirChatWhatsApp(telefono, textoWhatsApp(cliente, plantilla), detectarCelular())
 }
 
 export function nombreArchivoPedido(codigo: string): string {

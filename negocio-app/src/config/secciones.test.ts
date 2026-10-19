@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { acentoDeRuta, acentoInicio, claveSeccion, mismaSeccion, secciones } from './secciones.ts'
+import {
+  acentoDeRuta,
+  acentoInicio,
+  claveSeccion,
+  fichasInicio,
+  menuInicio,
+  mismaSeccion,
+  secciones,
+} from './secciones.ts'
 
 describe('claveSeccion', () => {
   it('agrupa inicio, venta y compartir', () => {
@@ -13,6 +21,14 @@ describe('claveSeccion', () => {
     expect(claveSeccion('/clientes')).toBe('clientes')
     expect(claveSeccion('/catalogo')).toBe('catalogo')
     expect(claveSeccion('/abonos')).toBe('abonos')
+    expect(claveSeccion('/mensaje')).toBe('mensaje')
+  })
+})
+
+describe('fichas de inicio', () => {
+  it('pone el mensaje solo en inicio, no en el menú', () => {
+    expect(fichasInicio.some((seccion) => seccion.ruta === '/mensaje')).toBe(true)
+    expect(menuInicio.some((seccion) => seccion.ruta === '/mensaje')).toBe(false)
   })
 })
 

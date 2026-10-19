@@ -7,6 +7,7 @@ export const CLAVE_FECHAS_ABONO = 'abonos-fechas'
 export const CLAVE_CANASTAS = 'canastas'
 export const CLAVE_ENVIOS = 'envios'
 export const CLAVE_ABONOS_CANASTA = 'abonos-canasta'
+export const CLAVE_PLANTILLA = 'plantilla-compartir'
 
 const PREFIJO = 'negocio.cache.v1.'
 const FRESCURA_MS = 2500

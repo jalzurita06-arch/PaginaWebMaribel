@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { VistaAnimada } from '../components/PanelDesplegable.tsx'
-import { Pencil } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { CampanaAbono } from '../components/CampanaAbono.tsx'
@@ -21,6 +21,7 @@ import { formatearDolares } from '../lib/dinero.ts'
 import { excedenteAbono, mensajeAbonoRegistrado, saldoPendiente, totalCanasta } from '../lib/reglas.ts'
 import {
   agregarAbono,
+  borrarAbono,
   editarAbono,
   listarAbonos,
   listarCanastaCliente,
@@ -72,6 +73,7 @@ export function Abonos() {
   const [errorDetalle, setErrorDetalle] = useState<{ id: string; texto: string } | null>(null)
   const [errorAbonos, setErrorAbonos] = useState<{ id: string; texto: string } | null>(null)
   const [modo, setModo] = useState<ModoFormulario | null>(null)
+  const [abonoBorrar, setAbonoBorrar] = useState<Abono | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [aviso, setAviso] = useState<AvisoEstado | null>(null)
   const epocaDetalle = useRef(0)
@@ -165,12 +167,14 @@ export function Abonos() {
   function elegirCliente(id: string) {
     setAviso(null)
     setModo(null)
+    setAbonoBorrar(null)
     setParams({ cliente: id })
   }
 
   function volverABuscar() {
     setAviso(null)
     setModo(null)
+    setAbonoBorrar(null)
     if (desdeCanasta) {
       navigate('/canasta', { replace: true, state: estadoCanastaAbierta(clienteId) })
       return
@@ -255,6 +259,42 @@ export function Abonos() {
     return resultado
   }
 
+  async function confirmarBorrado(abono: Abono) {
+    if (!cliente || cliente.id !== clienteId) {
+      mostrar('No se pudo borrar el abono. Inténtalo de nuevo.', 'error')
+      return
+    }
+
+    setOcupado(true)
+    const resultado = await borrarAbono(cliente.id, abono.id)
+    if (!resultado.ok) {
+      setOcupado(false)
+      mostrar(resultado.mensaje, 'error')
+      return
+    }
+
+    const lista = await listarAbonos(cliente.id)
+    setOcupado(false)
+    epocaDetalle.current += 1
+    setRecargaLista((valor) => valor + 1)
+    setCliente(resultado.datos)
+    setAbonoBorrar(null)
+    if (lista.ok) {
+      setAbonos(lista.datos)
+      setErrorAbonos(null)
+      if (total != null) {
+        reemplazarCache(claveDetalleAbono(cliente.id), {
+          cliente: resultado.datos,
+          total,
+          abonos: lista.datos,
+        })
+      }
+    } else {
+      setErrorAbonos({ id: cliente.id, texto: lista.mensaje })
+    }
+    mostrar('Abono borrado.', 'ok')
+  }
+
   const detalleVisible = cliente != null && cliente.id === clienteId
   const detalleListo = detalleVisible && total != null
   const modoVisible = modo?.clienteId === clienteId ? modo : null
@@ -321,12 +361,22 @@ export function Abonos() {
           onReintentar={() => setRecargaDetalle((valor) => valor + 1)}
           onAgregar={() => {
             setAviso(null)
+            setAbonoBorrar(null)
             if (clienteId) setModo({ clienteId, tipo: 'nuevo' })
           }}
           onEditar={(abono) => {
             setAviso(null)
+            setAbonoBorrar(null)
             if (clienteId) setModo({ clienteId, tipo: 'editar', abono })
           }}
+          onPedirBorrar={(abono) => {
+            setAviso(null)
+            setAbonoBorrar(abono)
+          }}
+          onCancelarBorrar={() => setAbonoBorrar(null)}
+          onConfirmarBorrar={(abono) => void confirmarBorrado(abono)}
+          abonoBorrarId={abonoBorrar?.id ?? null}
+          ocupado={ocupado}
         />
       ) : null}
 
@@ -466,6 +516,11 @@ function DetalleAbono({
   onReintentar,
   onAgregar,
   onEditar,
+  onPedirBorrar,
+  onCancelarBorrar,
+  onConfirmarBorrar,
+  abonoBorrarId,
+  ocupado,
 }: {
   acento: string
   cliente: Cliente | null
@@ -478,6 +533,11 @@ function DetalleAbono({
   onReintentar: () => void
   onAgregar: () => void
   onEditar: (abono: Abono) => void
+  onPedirBorrar: (abono: Abono) => void
+  onCancelarBorrar: () => void
+  onConfirmarBorrar: (abono: Abono) => void
+  abonoBorrarId: string | null
+  ocupado: boolean
 }) {
   const { enLinea } = useConexion()
   const tituloId = useId()
@@ -550,25 +610,63 @@ function DetalleAbono({
             <p className="rounded-3xl bg-white px-5 py-8 text-center shadow-sm">Aún no hay abonos.</p>
           ) : (
             <ul className="flex flex-col gap-3">
-              {abonos.map((abono) => (
+              {abonos.map((abono) => {
+                const borrando = abonoBorrarId === abono.id
+                return (
                 <li
                   key={abono.id}
-                  className="flex items-center justify-between gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm"
+                  className="flex flex-col gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm"
                 >
-                  <span className="text-sm text-black/60">{textoFecha(abono.fecha)}</span>
-                  <span className="ml-auto text-lg font-semibold tabular-nums">
-                    {formatearDolares(abono.monto)}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Editar abono del ${textoFecha(abono.fecha)} por ${formatearDolares(abono.monto)}`}
-                    onClick={() => onEditar(abono)}
-                    className="inline-flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-full bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-                  >
-                    <Pencil aria-hidden size={18} strokeWidth={2} />
-                  </button>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-black/60">{textoFecha(abono.fecha)}</span>
+                    <span className="ml-auto text-lg font-semibold tabular-nums">
+                      {formatearDolares(abono.monto)}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Editar abono del ${textoFecha(abono.fecha)} por ${formatearDolares(abono.monto)}`}
+                      disabled={ocupado}
+                      onClick={() => onEditar(abono)}
+                      className="inline-flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-full bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+                    >
+                      <Pencil aria-hidden size={18} strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Borrar abono del ${textoFecha(abono.fecha)} por ${formatearDolares(abono.monto)}`}
+                      disabled={!enLinea || ocupado}
+                      onClick={() => onPedirBorrar(abono)}
+                      className="inline-flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-full bg-peligro/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+                    >
+                      <Trash2 aria-hidden size={18} strokeWidth={2} />
+                    </button>
+                  </div>
+                  {borrando ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-sm">¿Borrar este abono?</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={ocupado}
+                          onClick={onCancelarBorrar}
+                          className={`${boton} bg-black/5`}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!enLinea || ocupado}
+                          onClick={() => onConfirmarBorrar(abono)}
+                          className={`${boton} bg-borrar`}
+                        >
+                          {ocupado ? 'Borrando…' : 'Borrar'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </li>
-              ))}
+                )
+              })}
             </ul>
           )}
         </section>

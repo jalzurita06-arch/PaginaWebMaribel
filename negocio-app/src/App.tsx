@@ -20,6 +20,7 @@ import { Clientes } from './pages/Clientes.tsx'
 import { Compartir } from './pages/Compartir.tsx'
 import { Inicio } from './pages/Inicio.tsx'
 import { Login } from './pages/Login.tsx'
+import { Mensaje } from './pages/Mensaje.tsx'
 import { Venta } from './pages/Venta.tsx'
 
 const transicionPagina = { duration: 0.25, ease: [0.22, 1, 0.36, 1] } as const
@@ -53,6 +54,7 @@ function Rutas() {
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/catalogo" element={<Catalogo />} />
           <Route path="/abonos" element={<Abonos />} />
+          <Route path="/mensaje" element={<Mensaje />} />
         </Route>
       </Routes>
     </motion.div>

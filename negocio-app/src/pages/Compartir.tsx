@@ -18,12 +18,15 @@ import {
   telefonoConPrefijo,
   textoWhatsApp,
 } from '../lib/compartir.ts'
-import { claveCanastaCliente, leerCache, pedirDatos } from '../lib/cacheLectura.ts'
+import { CLAVE_PLANTILLA, claveCanastaCliente, leerCache, pedirDatos } from '../lib/cacheLectura.ts'
+import { PLANTILLA_INICIAL } from '../lib/plantilla.ts'
+import { useDatos } from '../lib/useDatos.ts'
 import { formatearDolares } from '../lib/dinero.ts'
 import { generarImagen, prepararArchivoCompartir } from '../lib/generarImagen.tsx'
 import type { ItemCanasta } from '../lib/reglas.ts'
 import { obtenerCanasta } from '../services/canasta.ts'
 import { obtenerCliente, type Cliente } from '../services/clientes.ts'
+import { obtenerPlantilla } from '../services/plantilla.ts'
 
 const boton =
   'inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full px-5 py-3 text-base [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
@@ -50,6 +53,8 @@ export function Compartir() {
   const [imagenFallida, setImagenFallida] = useState(false)
   const [intento, setIntento] = useState(0)
   const esVenta = textoVenta != null
+  const plantillaDatos = useDatos(CLAVE_PLANTILLA, obtenerPlantilla)
+  const plantilla = plantillaDatos.datos ?? PLANTILLA_INICIAL
 
   useEffect(() => {
     let vigente = true
@@ -150,7 +155,7 @@ export function Compartir() {
 
   const resumen = cliente ? resumenPedido(items, cliente.saldo_favor) : null
   const telefono = cliente ? telefonoConPrefijo(cliente.telefono, negocio.telefonoPrefijo) : ''
-  const bancoListo = datosBancariosListos(negocio)
+  const bancoListo = datosBancariosListos(plantilla)
   const enCelular = detectarCelular()
   const imagenPreparada = enCelular ? archivoCelular != null : imagenLista != null
   const preparandoImagen = Boolean(
@@ -163,7 +168,7 @@ export function Compartir() {
     setAviso(null)
 
     if (!bancoListo) {
-      setAviso({ tono: 'error', texto: 'Faltan los datos bancarios del negocio. Revísalos antes de compartir.' })
+      setAviso({ tono: 'error', texto: 'Faltan los datos de la cuenta. Complétalos en Mensaje, en el inicio.' })
       return
     }
     if (!telefono) {
@@ -180,8 +185,8 @@ export function Compartir() {
         // El menú de compartir tiene que abrirse en este mismo toque, con imagen y texto ya listos.
         await compartirEnCelular(
           archivoCelular,
-          textoWhatsApp(cliente, negocio),
-          () => abrirWhatsAppDeCliente(cliente, negocio, negocio.telefonoPrefijo),
+          textoWhatsApp(cliente, plantilla),
+          () => abrirWhatsAppDeCliente(cliente, plantilla, negocio.telefonoPrefijo),
           setAviso,
         )
         return
@@ -197,7 +202,7 @@ export function Compartir() {
       )
       if (!resultado.ok) return
 
-      const chat = abrirWhatsAppDeCliente(cliente, negocio, negocio.telefonoPrefijo)
+      const chat = abrirWhatsAppDeCliente(cliente, plantilla, negocio.telefonoPrefijo)
       if (chat.bloqueada) {
         setAviso({
           tono: 'error',
@@ -270,7 +275,7 @@ export function Compartir() {
               <Aviso>Este cliente no tiene un teléfono válido para WhatsApp.</Aviso>
             ) : null}
             {!bancoListo ? (
-              <Aviso>Faltan los datos bancarios del negocio. Revísalos antes de compartir.</Aviso>
+              <Aviso>Faltan los datos de la cuenta. Complétalos en Mensaje, en el inicio.</Aviso>
             ) : null}
             {imagenFallida ? <Aviso>No se pudo crear la imagen del pedido.</Aviso> : null}
 

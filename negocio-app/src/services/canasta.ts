@@ -218,6 +218,14 @@ export async function editarPedidoFecha(
   }
 }
 
+/** Borra todas las prendas de un día de compra. */
+export async function borrarPedidoFecha(
+  clienteId: string,
+  fecha: string,
+): Promise<Resultado<ItemCanasta[]>> {
+  return editarPedidoFecha(clienteId, fecha, [])
+}
+
 function preparar(): { ok: false; mensaje: string } | SupabaseClient {
   if (!supabase) return { ok: false, mensaje: MENSAJE_CONFIG }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {

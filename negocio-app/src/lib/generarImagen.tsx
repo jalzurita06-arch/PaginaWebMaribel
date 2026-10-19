@@ -4,7 +4,9 @@ import { createRoot } from 'react-dom/client'
 import { ResumenImagen } from '../components/ResumenImagen.tsx'
 import { obtenerCanasta } from '../services/canasta.ts'
 import { obtenerCliente } from '../services/clientes.ts'
+import { obtenerPlantilla } from '../services/plantilla.ts'
 import { formatearFechaRecibo, resumenPedido } from './compartir.ts'
+import { PLANTILLA_INICIAL } from './plantilla.ts'
 import type { ItemCanasta } from './reglas.ts'
 
 /** Lee la canasta, o solo la venta indicada, y arma el PNG. No guarda ni modifica ningún dato. */
@@ -24,6 +26,8 @@ export async function generarImagen(clienteId: string, venta?: ItemCanasta[]): P
   }
 
   const resumen = resumenPedido(items, cliente.datos.saldo_favor)
+  const plantilla = await obtenerPlantilla()
+  const bloques = plantilla.ok ? plantilla.datos.bloquesImagen : PLANTILLA_INICIAL.bloquesImagen
   const contenedor = document.createElement('div')
   contenedor.setAttribute('aria-hidden', 'true')
   contenedor.style.position = 'fixed'
@@ -48,6 +52,7 @@ export async function generarImagen(clienteId: string, venta?: ItemCanasta[]): P
           saldo={resumen.saldo}
           total={resumen.total}
           concepto={venta ? 'Esta venta' : undefined}
+          bloques={bloques}
         />,
       )
     })

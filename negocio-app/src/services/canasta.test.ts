@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  borrarPedidoFecha,
   editarPedidoFecha,
   leerCantidadEntera,
   mensajeErrorCanasta,
@@ -91,5 +92,17 @@ describe('editarPedidoFecha', () => {
       ok: false,
       mensaje: 'La cantidad debe ser un entero mayor que 0.',
     })
+  })
+})
+
+describe('borrarPedidoFecha', () => {
+  it('valida que el id del cliente no esté vacío', async () => {
+    const res = await borrarPedidoFecha('', '2026-10-17')
+    expect(res).toEqual({ ok: false, mensaje: 'No se encontró el cliente.' })
+  })
+
+  it('valida el formato de la fecha', async () => {
+    const res = await borrarPedidoFecha('cli-1', '17-10-2026')
+    expect(res).toEqual({ ok: false, mensaje: 'Fecha de pedido no válida.' })
   })
 })

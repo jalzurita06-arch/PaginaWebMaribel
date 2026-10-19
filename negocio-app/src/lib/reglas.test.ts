@@ -156,6 +156,12 @@ describe('saldoTrasEditarAbono', () => {
     expect(saldoTrasEditarAbono(0, 4, 1)).toBeNull()
   })
 
+  it('resta el monto entero al borrar un abono', () => {
+    expect(saldoTrasEditarAbono(10, 5, 0)).toBe(5)
+    expect(saldoTrasEditarAbono(5, 5, 0)).toBe(0)
+    expect(saldoTrasEditarAbono(3, 5, 0)).toBeNull()
+  })
+
   it('redondea la corrección a centavos', () => {
     expect(saldoTrasEditarAbono(0.1, 0.2, 0.3)).toBe(0.2)
   })

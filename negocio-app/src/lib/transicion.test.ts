@@ -9,6 +9,7 @@ describe('destinoDeSalto', () => {
   })
 
   it('salta a otra sección', () => {
+    expect(destinoDeSalto('/', '/mensaje')).toBe('/mensaje')
     expect(destinoDeSalto('/', '/clientes')).toBe('/clientes')
     expect(destinoDeSalto('/clientes', '/canasta')).toBe('/canasta')
   })

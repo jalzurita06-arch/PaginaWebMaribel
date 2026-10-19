@@ -1,13 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
+import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { CampanaAbono } from '../components/CampanaAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
-import { PanelEditarPedido, type PedidoAEditar } from '../components/PanelEditarPedido.tsx'
+import { PanelEditarPedido, textoFechaPedido, type PedidoAEditar } from '../components/PanelEditarPedido.tsx'
 import { FilaTablaDesplegable, PanelDesplegable, transicionDesplegar } from '../components/PanelDesplegable.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
@@ -46,6 +46,7 @@ import {
   type EnvioSemana,
   type TipoEnvio,
 } from '../services/envios.ts'
+import { borrarPedidoFecha } from '../services/canasta.ts'
 import { listarAbonosDeClientes, type Abono } from '../services/clientes.ts'
 
 type AvisoEstado = { texto: string; tono: 'ok' | 'error' }
@@ -129,15 +130,46 @@ export function Canasta() {
   const [busqueda, setBusqueda] = useState('')
   const [orden, setOrden] = useState<OrdenCanasta>('codigo')
   const [pedidoEdicion, setPedidoEdicion] = useState<PedidoAEditar | null>(null)
+  const [pedidoBorrar, setPedidoBorrar] = useState<PedidoAEditar | null>(null)
+  const [borrandoPedido, setBorrandoPedido] = useState(false)
 
-  function abrirEdicionPedido(canasta: CanastaAbierta, dia: GrupoDia) {
-    setPedidoEdicion({
+  function pedidoDesdeDia(canasta: CanastaAbierta, dia: GrupoDia): PedidoAEditar {
+    return {
       clienteId: canasta.clienteId,
       clienteCodigo: canasta.codigo,
       clienteNombre: canasta.nombre,
       fecha: dia.fecha,
       grupos: dia.grupos,
-    })
+    }
+  }
+
+  function abrirEdicionPedido(canasta: CanastaAbierta, dia: GrupoDia) {
+    setPedidoBorrar(null)
+    setPedidoEdicion(pedidoDesdeDia(canasta, dia))
+  }
+
+  function abrirBorradoPedido(canasta: CanastaAbierta, dia: GrupoDia) {
+    setPedidoEdicion(null)
+    setPedidoBorrar(pedidoDesdeDia(canasta, dia))
+  }
+
+  async function confirmarBorradoPedido() {
+    if (!pedidoBorrar || borrandoPedido) return
+    if (!enLinea) {
+      mostrar(MENSAJE_FALLO_RED, 'error')
+      return
+    }
+    setBorrandoPedido(true)
+    const resultado = await borrarPedidoFecha(pedidoBorrar.clienteId, pedidoBorrar.fecha)
+    if (!montado.current) return
+    setBorrandoPedido(false)
+    if (!resultado.ok) {
+      mostrar(resultado.mensaje, 'error')
+      return
+    }
+    setPedidoBorrar(null)
+    mostrar('Compra borrada.', 'ok')
+    setRecarga((valor) => valor + 1)
   }
 
   useEffect(() => {
@@ -392,6 +424,7 @@ export function Canasta() {
               }
               onConfirmar={(canasta, tipo) => void confirmarEnvio(canasta, tipo)}
               onEditarPedido={abrirEdicionPedido}
+              onBorrarPedido={abrirBorradoPedido}
             />
           ) : null}
 
@@ -425,6 +458,7 @@ export function Canasta() {
                   }
                   onConfirmar={(tipo) => void confirmarEnvio(canasta, tipo)}
                   onEditarPedido={(dia) => abrirEdicionPedido(canasta, dia)}
+                  onBorrarPedido={(dia) => abrirBorradoPedido(canasta, dia)}
                 />
               ))}
             </ul>
@@ -455,6 +489,16 @@ export function Canasta() {
           setAviso({ texto: 'Pedido actualizado correctamente.', tono: 'ok' })
           setRecarga((valor) => valor + 1)
         }}
+      />
+
+      <ConfirmacionBorrarPedido
+        pedido={pedidoBorrar}
+        abierto={pedidoBorrar != null}
+        ocupado={borrandoPedido}
+        onCerrar={() => {
+          if (!borrandoPedido) setPedidoBorrar(null)
+        }}
+        onConfirmar={() => void confirmarBorradoPedido()}
       />
     </Layout>
   )
@@ -525,6 +569,7 @@ function FilaCanasta({
   onElegirTipo,
   onConfirmar,
   onEditarPedido,
+  onBorrarPedido,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -541,6 +586,7 @@ function FilaCanasta({
   onElegirTipo: (tipo: TipoEnvio) => void
   onConfirmar: (tipo: TipoEnvio) => void
   onEditarPedido?: (dia: GrupoDia) => void
+  onBorrarPedido?: (dia: GrupoDia) => void
 }) {
   const detalleId = useId()
 
@@ -583,6 +629,7 @@ function FilaCanasta({
             dias={canasta.dias}
             abonos={abonos}
             onEditarPedido={onEditarPedido}
+            onBorrarPedido={onBorrarPedido}
           />
         </div>
       </PanelDesplegable>
@@ -621,6 +668,7 @@ function TablaCanastas({
   onElegirTipo,
   onConfirmar,
   onEditarPedido,
+  onBorrarPedido,
 }: {
   canastas: CanastaAbierta[]
   acento: string
@@ -637,6 +685,7 @@ function TablaCanastas({
   onElegirTipo: (id: string, tipo: TipoEnvio) => void
   onConfirmar: (canasta: CanastaAbierta, tipo: TipoEnvio) => void
   onEditarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
+  onBorrarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
 }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
@@ -694,6 +743,7 @@ function TablaCanastas({
                   onElegirTipo={(tipo) => onElegirTipo(canasta.clienteId, tipo)}
                   onConfirmar={(tipo) => onConfirmar(canasta, tipo)}
                   onEditarPedido={(dia) => onEditarPedido?.(canasta, dia)}
+                  onBorrarPedido={(dia) => onBorrarPedido?.(canasta, dia)}
                 />
               )
             })}
@@ -720,6 +770,7 @@ function FilasTabla({
   onElegirTipo,
   onConfirmar,
   onEditarPedido,
+  onBorrarPedido,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -736,6 +787,7 @@ function FilasTabla({
   onElegirTipo: (tipo: TipoEnvio) => void
   onConfirmar: (tipo: TipoEnvio) => void
   onEditarPedido?: (dia: GrupoDia) => void
+  onBorrarPedido?: (dia: GrupoDia) => void
 }) {
   const detalleId = useId()
 
@@ -799,6 +851,7 @@ function FilasTabla({
             abonos={abonos}
             holgado
             onEditarPedido={onEditarPedido}
+            onBorrarPedido={onBorrarPedido}
           />
         </div>
       </FilaTablaDesplegable>
@@ -813,6 +866,7 @@ function DetalleCanasta({
   abonos,
   holgado = false,
   onEditarPedido,
+  onBorrarPedido,
 }: {
   id: string
   grupos: GrupoPrecio[]
@@ -820,6 +874,7 @@ function DetalleCanasta({
   abonos: Abono[] | null
   holgado?: boolean
   onEditarPedido?: (dia: GrupoDia) => void
+  onBorrarPedido?: (dia: GrupoDia) => void
 }) {
   return (
     <div
@@ -831,7 +886,13 @@ function DetalleCanasta({
       }
     >
       <div className={holgado ? 'min-w-0 pr-6' : 'min-w-0 pr-3'}>
-        <ListaPrendas grupos={grupos} dias={dias} apretado={!holgado} onEditarPedido={onEditarPedido} />
+        <ListaPrendas
+          grupos={grupos}
+          dias={dias}
+          apretado={!holgado}
+          onEditarPedido={onEditarPedido}
+          onBorrarPedido={onBorrarPedido}
+        />
       </div>
       <div
         className={
@@ -883,12 +944,14 @@ function ListaPrendas({
   dias = [],
   apretado = false,
   onEditarPedido,
+  onBorrarPedido,
 }: {
   id?: string
   grupos: GrupoPrecio[]
   dias?: GrupoDia[]
   apretado?: boolean
   onEditarPedido?: (dia: GrupoDia) => void
+  onBorrarPedido?: (dia: GrupoDia) => void
 }) {
   const internoId = useId()
   const tituloId = `${id ?? internoId}-titulo`
@@ -913,19 +976,37 @@ function ListaPrendas({
                   {dia.fecha ? textoFecha(dia.fecha) : 'Sin fecha'}
                   {apretado ? ` · ${dia.prendas}` : ` · ${textoCantidad(dia.prendas)}`}
                 </h4>
-                {onEditarPedido && dia.fecha ? (
-                  <button
-                    type="button"
-                    aria-label={`Editar pedido del ${textoFecha(dia.fecha)}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onEditarPedido(dia)
-                    }}
-                    className="inline-flex size-6 shrink-0 touch-manipulation items-center justify-center rounded-full bg-black/5 text-black hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-                    title="Editar prendas de este pedido"
-                  >
-                    <Pencil size={12} aria-hidden />
-                  </button>
+                {dia.fecha && (onEditarPedido || onBorrarPedido) ? (
+                  <span className="flex shrink-0 items-center gap-1">
+                    {onEditarPedido ? (
+                      <button
+                        type="button"
+                        aria-label={`Editar pedido del ${textoFecha(dia.fecha)}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onEditarPedido(dia)
+                        }}
+                        className="inline-flex size-6 shrink-0 touch-manipulation items-center justify-center rounded-full bg-black/5 text-black hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                        title="Editar prendas de este pedido"
+                      >
+                        <Pencil size={12} aria-hidden />
+                      </button>
+                    ) : null}
+                    {onBorrarPedido ? (
+                      <button
+                        type="button"
+                        aria-label={`Borrar compra del ${textoFecha(dia.fecha)}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onBorrarPedido(dia)
+                        }}
+                        className="inline-flex size-6 shrink-0 touch-manipulation items-center justify-center rounded-full bg-peligro/40 text-black hover:bg-peligro/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                        title="Borrar esta compra"
+                      >
+                        <Trash2 size={12} aria-hidden />
+                      </button>
+                    ) : null}
+                  </span>
                 ) : null}
               </div>
               <ul className={`flex flex-col ${apretado ? 'gap-1.5' : 'gap-1'}`}>
@@ -1478,6 +1559,100 @@ function SelectorEnvio({
       </button>
       {panel}
     </div>
+  )
+}
+
+function ConfirmacionBorrarPedido({
+  pedido,
+  abierto,
+  ocupado,
+  onCerrar,
+  onConfirmar,
+}: {
+  pedido: PedidoAEditar | null
+  abierto: boolean
+  ocupado: boolean
+  onCerrar: () => void
+  onConfirmar: () => void
+}) {
+  const { enLinea } = useConexion()
+  const tituloId = useId()
+  const reducirMovimiento = useReducedMotion()
+  const transicion = reducirMovimiento ? ({ duration: 0 } as const) : transicionDesplegar
+
+  useEffect(() => {
+    if (!abierto) return
+    function alTecla(evento: KeyboardEvent) {
+      if (evento.key === 'Escape' && !ocupado) onCerrar()
+    }
+    window.addEventListener('keydown', alTecla)
+    return () => window.removeEventListener('keydown', alTecla)
+  }, [abierto, ocupado, onCerrar])
+
+  if (!pedido) return null
+
+  return createPortal(
+    <AnimatePresence>
+      {abierto ? (
+        <motion.div
+          key="modal-borrar-pedido"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={tituloId}
+          initial={reducirMovimiento ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={reducirMovimiento ? undefined : { opacity: 0 }}
+          transition={transicion}
+          className="fixed inset-0 z-50 flex items-end justify-center"
+        >
+          <button
+            type="button"
+            aria-label="Cerrar confirmación"
+            disabled={ocupado}
+            onClick={() => {
+              if (!ocupado) onCerrar()
+            }}
+            className="absolute inset-0 bg-black/40"
+          />
+          <motion.div
+            initial={reducirMovimiento ? false : { opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reducirMovimiento ? undefined : { opacity: 0, y: 28 }}
+            transition={transicion}
+            className="relative z-10 flex w-full max-w-lg flex-col gap-4 rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
+          >
+            <h2 id={tituloId} className="text-lg font-bold tracking-tight">
+              ¿Borrar esta compra?
+            </h2>
+            <p className="text-sm text-black/70">
+              <span className="font-semibold uppercase">{pedido.clienteCodigo}</span>
+              {pedido.clienteNombre ? ` · ${pedido.clienteNombre}` : ''}
+              {` · ${textoFechaPedido(pedido.fecha)}`}
+              {` · ${textoCantidad(pedido.grupos.reduce((suma, grupo) => suma + grupo.cantidad, 0))}`}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={ocupado || !enLinea}
+                onClick={onConfirmar}
+                className={`${boton} bg-borrar`}
+              >
+                {ocupado ? 'Borrando…' : 'Borrar compra'}
+              </button>
+              <button
+                type="button"
+                disabled={ocupado}
+                onClick={onCerrar}
+                className={`${boton} bg-fondo`}
+              >
+                Cancelar
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
+    document.body,
   )
 }
 

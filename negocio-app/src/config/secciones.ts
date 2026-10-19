@@ -1,4 +1,5 @@
 import {
+  MessageCircle,
   Shirt,
   ShoppingBasket,
   Tags,
@@ -54,6 +55,13 @@ export const secciones = {
     icono: Wallet,
     subtitulo: 'Saldo a favor',
   },
+  mensaje: {
+    nombre: 'Mensaje',
+    ruta: '/mensaje',
+    acento: '#F8D5C4',
+    icono: MessageCircle,
+    subtitulo: 'WhatsApp y recibo',
+  },
 } as const satisfies Record<string, Seccion>
 
 export const menuInicio: Seccion[] = [
@@ -64,6 +72,8 @@ export const menuInicio: Seccion[] = [
   secciones.abonos,
 ]
 
+export const fichasInicio: Seccion[] = [...menuInicio, secciones.mensaje]
+
 export function claveSeccion(pathname: string): string {
   if (pathname === '/' || pathname === '') return 'inicio'
   if (pathname.startsWith('/venta') || pathname.startsWith('/compartir')) return 'venta'
@@ -71,6 +81,7 @@ export function claveSeccion(pathname: string): string {
   if (pathname.startsWith('/clientes')) return 'clientes'
   if (pathname.startsWith('/catalogo')) return 'catalogo'
   if (pathname.startsWith('/abonos')) return 'abonos'
+  if (pathname.startsWith('/mensaje')) return 'mensaje'
   return pathname
 }
 
@@ -82,6 +93,7 @@ export function acentoDeRuta(pathname: string): string {
   if (clave === 'clientes') return secciones.clientes.acento
   if (clave === 'catalogo') return secciones.catalogo.acento
   if (clave === 'abonos') return secciones.abonos.acento
+  if (clave === 'mensaje') return secciones.mensaje.acento
   return acentoLogin
 }
 

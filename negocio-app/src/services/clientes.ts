@@ -554,6 +554,81 @@ export async function editarAbono(
   }
 }
 
+/** Quita un abono y resta su monto del saldo. No crea una devolución. */
+export async function borrarAbono(clienteId: string, abonoId: string): Promise<Resultado<Cliente>> {
+  const db = preparar()
+  if (esFallo(db)) return db
+
+  try {
+    const actual = await filaCliente(db, clienteId)
+    if (!actual.ok) return actual
+    const guardado = await filaAbono(db, clienteId, abonoId)
+    if (!guardado.ok) return guardado
+
+    const nuevoSaldo = saldoTrasEditarAbono(actual.datos.cliente.saldo_favor, guardado.datos.abono.monto, 0)
+    if (nuevoSaldo == null) {
+      return {
+        ok: false,
+        mensaje: 'No se puede borrar el abono. El saldo a favor no puede quedar en negativo.',
+      }
+    }
+
+    const { data: abonoBorrado, error: errorAbono } = await db
+      .from('abonos')
+      .delete()
+      .eq('id', abonoId)
+      .eq('cliente_id', clienteId)
+      .eq('monto', guardado.datos.montoCrudo)
+      .eq('fecha', guardado.datos.fechaCruda)
+      .select('id')
+
+    if (errorAbono || !abonoBorrado?.length) {
+      const mensaje = errorAbono
+        ? mensajeErrorCliente(errorAbono, 'borrar el abono')
+        : 'El abono cambió mientras se borraba. Inténtalo de nuevo.'
+      return { ok: false, mensaje }
+    }
+
+    if (nuevoSaldo === actual.datos.cliente.saldo_favor) {
+      return { ok: true, datos: actual.datos.cliente }
+    }
+
+    const { data: actualizado, error: errorSaldo } = await db
+      .from('clientes')
+      .update({ saldo_favor: nuevoSaldo })
+      .eq('id', clienteId)
+      .eq('saldo_favor', actual.datos.saldoCrudo)
+      .eq('estado', actual.datos.cliente.estado)
+      .select(COLUMNAS)
+
+    if (errorSaldo || !actualizado?.length) {
+      const { error: errorRollback } = await db.from('abonos').insert({
+        id: abonoId,
+        cliente_id: clienteId,
+        monto: guardado.datos.montoCrudo,
+        fecha: guardado.datos.fechaCruda,
+      })
+      if (errorRollback) {
+        return {
+          ok: false,
+          mensaje:
+            'El abono se borró, pero el saldo a favor no se actualizó. Revisa el cliente antes de editarlo de nuevo.',
+        }
+      }
+      const mensaje = errorSaldo
+        ? mensajeErrorCliente(errorSaldo, 'actualizar el saldo')
+        : 'El cliente cambió mientras se borraba el abono. Inténtalo de nuevo.'
+      return { ok: false, mensaje }
+    }
+
+    const cliente = leerCliente(actualizado[0])
+    if (!cliente) return { ok: false, mensaje: 'No se pudo leer el saldo actualizado.' }
+    return { ok: true, datos: cliente }
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorCliente(error, 'borrar el abono') }
+  }
+}
+
 export async function listarCanastaCliente(clienteId: string): Promise<Resultado<PrendaCanasta[]>> {
   const db = preparar()
   if (esFallo(db)) return db

@@ -1,4 +1,4 @@
-/** Datos del negocio. El mensaje de WhatsApp sale de aquí. */
+/** Prefijo y valores de respaldo. El mensaje editable se guarda en plantilla_compartir. */
 export const negocio = {
   nombreTitular: 'Maribel Lozada Reyes',
   banco: 'Banco Pichincha',
