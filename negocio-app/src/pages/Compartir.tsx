@@ -279,7 +279,7 @@ export function Compartir() {
             ) : null}
             {!bancoListo ? (
               <Aviso>
-                Faltan los datos de la cuenta. Complétalos en {secciones.mensaje.nombre}, en el inicio.
+                {`Faltan los datos de la cuenta. Complétalos en ${secciones.mensaje.nombre}, en el inicio.`}
               </Aviso>
             ) : null}
             {imagenFallida ? <Aviso>No se pudo crear la imagen del pedido.</Aviso> : null}
