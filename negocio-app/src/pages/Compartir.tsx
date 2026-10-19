@@ -168,7 +168,10 @@ export function Compartir() {
     setAviso(null)
 
     if (!bancoListo) {
-      setAviso({ tono: 'error', texto: 'Faltan los datos de la cuenta. Complétalos en Mensaje, en el inicio.' })
+      setAviso({
+        tono: 'error',
+        texto: `Faltan los datos de la cuenta. Complétalos en ${secciones.mensaje.nombre}, en el inicio.`,
+      })
       return
     }
     if (!telefono) {
@@ -275,7 +278,9 @@ export function Compartir() {
               <Aviso>Este cliente no tiene un teléfono válido para WhatsApp.</Aviso>
             ) : null}
             {!bancoListo ? (
-              <Aviso>Faltan los datos de la cuenta. Complétalos en Mensaje, en el inicio.</Aviso>
+              <Aviso>
+                Faltan los datos de la cuenta. Complétalos en {secciones.mensaje.nombre}, en el inicio.
+              </Aviso>
             ) : null}
             {imagenFallida ? <Aviso>No se pudo crear la imagen del pedido.</Aviso> : null}
 

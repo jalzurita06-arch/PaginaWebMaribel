@@ -26,7 +26,7 @@ describe('claveSeccion', () => {
 })
 
 describe('fichas de inicio', () => {
-  it('pone el mensaje solo en inicio, no en el menú', () => {
+  it('pone el editor solo en inicio, no en el menú', () => {
     expect(fichasInicio.some((seccion) => seccion.ruta === '/mensaje')).toBe(true)
     expect(menuInicio.some((seccion) => seccion.ruta === '/mensaje')).toBe(false)
   })

@@ -56,11 +56,11 @@ export const secciones = {
     subtitulo: 'Saldo a favor',
   },
   mensaje: {
-    nombre: 'Mensaje',
+    nombre: 'Editor',
     ruta: '/mensaje',
     acento: '#F8D5C4',
     icono: MessageCircle,
-    subtitulo: 'WhatsApp y recibo',
+    subtitulo: 'Mensaje e imagen',
   },
 } as const satisfies Record<string, Seccion>
 
