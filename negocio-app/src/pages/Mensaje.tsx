@@ -291,7 +291,7 @@ export function Mensaje() {
                       </BotonAccion>
                     </div>
                     <div className="max-h-[min(58dvh,calc(100dvh-14rem))] overflow-y-auto">
-                      <VistaRecibo>
+                      <VistaRecibo key={vistaImagen}>
                         <ResumenImagen
                           codigo={CLIENTE_EJEMPLO.codigo}
                           nombre={CLIENTE_EJEMPLO.nombre}

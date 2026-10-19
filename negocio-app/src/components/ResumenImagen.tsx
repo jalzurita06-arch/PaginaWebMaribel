@@ -192,16 +192,19 @@ export function ResumenImagen({
         if (bloque.clave === 'abono') {
           return <Linea key="abono" etiqueta="Abonado" valor={formatearDolares(abono)} />
         }
-        return (
-          <Linea
-            key="saldo"
-            etiqueta="Saldo pendiente"
-            valor={formatearDolares(saldo)}
-            fuerte
-            resaltado
-            colorVenta
-          />
-        )
+        if (bloque.clave === 'saldo') {
+          return (
+            <Linea
+              key="saldo"
+              etiqueta="Saldo pendiente"
+              valor={formatearDolares(saldo)}
+              fuerte
+              resaltado
+              colorVenta
+            />
+          )
+        }
+        return null
       })}
     </article>
   )
