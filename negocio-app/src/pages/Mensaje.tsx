@@ -274,8 +274,8 @@ export function Mensaje() {
                   </Tarjeta>
                   <Acciones ocupado={ocupado} enLinea={enLinea} onRestablecer={restablecer} onGuardar={() => void guardar()} />
                 </div>
-                <aside className="order-1 sticky top-4 z-20 flex max-h-[38dvh] flex-col self-start lg:order-2 lg:h-[calc(100dvh-10rem)] lg:max-h-[calc(100dvh-10rem)]">
-                  <Tarjeta titulo="Así se ve la imagen" className="min-h-0 flex-1 overflow-hidden">
+                <aside className="order-1 sticky top-4 z-20 self-start lg:order-2 lg:max-h-[calc(100dvh-10rem)]">
+                  <Tarjeta titulo="Así se ve la imagen">
                     <div className="grid grid-cols-2 gap-2">
                       <BotonAccion
                         variante={vistaImagen === 'canasta' ? 'primario' : 'suave'}
@@ -290,20 +290,20 @@ export function Mensaje() {
                         Esta venta
                       </BotonAccion>
                     </div>
-                    <div className="relative min-h-0 flex-1">
-                    <VistaRecibo>
-                      <ResumenImagen
-                        codigo={CLIENTE_EJEMPLO.codigo}
-                        nombre={CLIENTE_EJEMPLO.nombre}
-                        fecha={formatearFechaRecibo(new Date())}
-                        grupos={EJEMPLO_GRUPOS}
-                        abono={5}
-                        saldo={13}
-                        total={18}
-                        concepto={esVenta ? 'Esta venta' : undefined}
-                        bloques={plantilla.bloquesImagen}
-                      />
-                    </VistaRecibo>
+                    <div className="max-h-[min(58dvh,calc(100dvh-14rem))] overflow-y-auto">
+                      <VistaRecibo>
+                        <ResumenImagen
+                          codigo={CLIENTE_EJEMPLO.codigo}
+                          nombre={CLIENTE_EJEMPLO.nombre}
+                          fecha={formatearFechaRecibo(new Date())}
+                          grupos={EJEMPLO_GRUPOS}
+                          abono={5}
+                          saldo={13}
+                          total={18}
+                          concepto={esVenta ? 'Esta venta' : undefined}
+                          bloques={plantilla.bloquesImagen}
+                        />
+                      </VistaRecibo>
                     </div>
                   </Tarjeta>
                 </aside>
