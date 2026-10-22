@@ -7,6 +7,7 @@ import {
   fechaDiaLocal,
   mensajeAbonoRegistrado,
   ordenarCanastasAbiertas,
+  ordenarClientesPorEstado,
   ordenarPorCanasta,
   saldoPendiente,
   saldoTrasEditarAbono,
@@ -230,6 +231,33 @@ describe('ordenarPorCanasta', () => {
         { codigo: 'D', prendas: 5 },
       ]).map((cliente) => cliente.codigo),
     ).toEqual(['A', 'B', 'C', 'D'])
+  })
+})
+
+describe('ordenarClientesPorEstado', () => {
+  const filas = [
+    { codigo: 'Z', estado: 'activo' },
+    { codigo: 'A', estado: 'inactivo' },
+    { codigo: 'M', estado: 'activo' },
+    { codigo: 'B', estado: 'inactivo' },
+  ]
+
+  it('pone activos primero y desempata por código', () => {
+    expect(ordenarClientesPorEstado(filas, 'activos').map((fila) => fila.codigo)).toEqual([
+      'M',
+      'Z',
+      'A',
+      'B',
+    ])
+  })
+
+  it('pone inactivos primero y desempata por código', () => {
+    expect(ordenarClientesPorEstado(filas, 'inactivos').map((fila) => fila.codigo)).toEqual([
+      'A',
+      'B',
+      'M',
+      'Z',
+    ])
   })
 })
 

@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Form
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import { PanelDesplegable, transicionDesplegar, VistaAnimada } from '../components/PanelDesplegable.tsx'
-import { Plus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { Aviso } from '../components/Aviso.tsx'
 import { DetalleCliente } from '../components/DetalleCliente.tsx'
 import { EtiquetaEstado } from '../components/EtiquetaEstado.tsx'
@@ -19,7 +19,14 @@ import { subirAlInicio } from '../lib/dispositivo.ts'
 import { useDatos } from '../lib/useDatos.ts'
 import type { DatosEdicionCliente, DatosNuevoCliente } from '../lib/clienteFormulario.ts'
 import { formatearDolares } from '../lib/dinero.ts'
-import { excedenteAbono, mensajeAbonoRegistrado, ordenarPorCanasta, totalCanasta } from '../lib/reglas.ts'
+import {
+  excedenteAbono,
+  mensajeAbonoRegistrado,
+  ordenarClientesPorEstado,
+  ordenarPorCanasta,
+  totalCanasta,
+  type OrdenEstadoCliente,
+} from '../lib/reglas.ts'
 import {
   actualizarCliente,
   agregarAbono,
@@ -75,14 +82,19 @@ export function Clientes() {
   const reducirMovimiento = useReducedMotion()
   const idBusqueda = useId()
   const [busqueda, setBusqueda] = useState('')
+  const [ordenEstado, setOrdenEstado] = useState<OrdenEstadoCliente>('activos')
   const [recarga, setRecarga] = useState(0)
   const lista = useDatos(CLAVE_CLIENTES, () => listarClientes(), recarga)
   const [parche, setParche] = useState<ClienteVenta[] | null>(null)
   const consulta = busqueda.trim()
   const origen = parche ?? lista.datos ?? []
   const clientes = useMemo(
-    () => origen.filter((cliente) => coincideCliente(consulta, cliente.codigo, cliente.nombre)),
-    [consulta, origen],
+    () =>
+      ordenarClientesPorEstado(
+        origen.filter((cliente) => coincideCliente(consulta, cliente.codigo, cliente.nombre)),
+        ordenEstado,
+      ),
+    [consulta, origen, ordenEstado],
   )
   const cargandoLista = lista.esperando && clientes.length === 0
   const [aviso, setAviso] = useState<AvisoEstado | null>(null)
@@ -366,6 +378,8 @@ export function Clientes() {
             <TablaClientes
               clientes={clientes}
               acento={acento}
+              ordenEstado={ordenEstado}
+              onOrdenEstado={() => setOrdenEstado(ordenEstado === 'activos' ? 'inactivos' : 'activos')}
               menuId={menuId}
               cambiandoId={cambiandoId}
               enLinea={enLinea}
@@ -382,6 +396,13 @@ export function Clientes() {
           ) : null}
 
           {clientes.length > 0 && !esPc ? (
+          <>
+          <div className="flex justify-end px-1">
+            <BotonOrdenEstado
+              orden={ordenEstado}
+              onAlternar={() => setOrdenEstado(ordenEstado === 'activos' ? 'inactivos' : 'activos')}
+            />
+          </div>
           <ul className="flex flex-col gap-3">
             {clientes.map((cliente) => (
               <li
@@ -475,6 +496,7 @@ export function Clientes() {
               </li>
             ))}
           </ul>
+          </>
           ) : null}
         </div>
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] lg:px-10">
@@ -565,9 +587,37 @@ export function Clientes() {
   )
 }
 
+function BotonOrdenEstado({
+  orden,
+  onAlternar,
+}: {
+  orden: OrdenEstadoCliente
+  onAlternar: () => void
+}) {
+  const activosPrimero = orden === 'activos'
+  return (
+    <button
+      type="button"
+      onClick={onAlternar}
+      aria-label={activosPrimero ? 'Mostrar inactivos primero' : 'Mostrar activos primero'}
+      title={activosPrimero ? 'Inactivos primero' : 'Activos primero'}
+      className="inline-flex min-h-11 items-center gap-1 rounded-full bg-black/10 px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+    >
+      Estado
+      {activosPrimero ? (
+        <ChevronUp aria-hidden size={22} strokeWidth={2} />
+      ) : (
+        <ChevronDown aria-hidden size={22} strokeWidth={2} />
+      )}
+    </button>
+  )
+}
+
 function TablaClientes({
   clientes,
   acento,
+  ordenEstado,
+  onOrdenEstado,
   menuId,
   cambiandoId,
   enLinea,
@@ -579,6 +629,8 @@ function TablaClientes({
 }: {
   clientes: Cliente[]
   acento: string
+  ordenEstado: OrdenEstadoCliente
+  onOrdenEstado: () => void
   menuId: string | null
   cambiandoId: string | null
   enLinea: boolean
@@ -607,8 +659,8 @@ function TablaClientes({
               <th scope="col" className="px-4 py-3 text-right font-semibold">
                 Saldo a favor
               </th>
-              <th scope="col" className="px-4 py-3 font-semibold">
-                Estado
+              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">
+                <BotonOrdenEstado orden={ordenEstado} onAlternar={onOrdenEstado} />
               </th>
               <th scope="col" className="px-4 py-3 text-right font-semibold">
                 <span className="sr-only">Acciones</span>

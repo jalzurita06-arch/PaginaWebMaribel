@@ -133,6 +133,23 @@ export function ordenarPorCanasta<T extends { codigo: string }>(filas: T[]): T[]
   return [...filas].sort((a, b) => compararCodigo(a.codigo, b.codigo))
 }
 
+export const ORDENES_ESTADO_CLIENTE = ['activos', 'inactivos'] as const
+export type OrdenEstadoCliente = (typeof ORDENES_ESTADO_CLIENTE)[number]
+
+/** En Clientes: activos o inactivos primero, y desempata por código. */
+export function ordenarClientesPorEstado<T extends { codigo: string; estado: string }>(
+  filas: T[],
+  orden: OrdenEstadoCliente,
+): T[] {
+  return [...filas].sort((a, b) => {
+    const aInactivo = a.estado === 'inactivo' ? 1 : 0
+    const bInactivo = b.estado === 'inactivo' ? 1 : 0
+    const porEstado = orden === 'activos' ? aInactivo - bInactivo : bInactivo - aInactivo
+    if (porEstado !== 0) return porEstado
+    return compararCodigo(a.codigo, b.codigo)
+  })
+}
+
 export const ORDENES_CANASTA = ['codigo', 'saldoMayor', 'saldoMenor'] as const
 export type OrdenCanasta = (typeof ORDENES_CANASTA)[number]
 
