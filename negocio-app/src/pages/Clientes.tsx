@@ -345,15 +345,23 @@ export function Clientes() {
             <label className="text-sm" htmlFor={idBusqueda}>
               Buscar
             </label>
-            <input
-              id={idBusqueda}
-              type="search"
-              enterKeyHint="search"
-              value={busqueda}
-              placeholder="Código o nombre"
-              onChange={(evento) => setBusqueda(evento.target.value)}
-              className="rounded-full bg-white px-5 py-4 text-base shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                id={idBusqueda}
+                type="search"
+                enterKeyHint="search"
+                value={busqueda}
+                placeholder="Código o nombre"
+                onChange={(evento) => setBusqueda(evento.target.value)}
+                className="min-w-0 flex-1 rounded-full bg-white px-4 py-2.5 text-sm shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black lg:px-5 lg:py-4 lg:text-base"
+              />
+              <BotonOrdenEstado
+                chico
+                className="lg:hidden"
+                orden={ordenEstado}
+                onAlternar={() => setOrdenEstado(ordenEstado === 'activos' ? 'inactivos' : 'activos')}
+              />
+            </div>
           </form>
 
           {cargandoLista ? <IndicadorCarga>Cargando clientes…</IndicadorCarga> : null}
@@ -396,13 +404,6 @@ export function Clientes() {
           ) : null}
 
           {clientes.length > 0 && !esPc ? (
-          <>
-          <div className="flex justify-end px-1">
-            <BotonOrdenEstado
-              orden={ordenEstado}
-              onAlternar={() => setOrdenEstado(ordenEstado === 'activos' ? 'inactivos' : 'activos')}
-            />
-          </div>
           <ul className="flex flex-col gap-3">
             {clientes.map((cliente) => (
               <li
@@ -496,7 +497,6 @@ export function Clientes() {
               </li>
             ))}
           </ul>
-          </>
           ) : null}
         </div>
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] lg:px-10">
@@ -590,9 +590,13 @@ export function Clientes() {
 function BotonOrdenEstado({
   orden,
   onAlternar,
+  chico = false,
+  className = '',
 }: {
   orden: OrdenEstadoCliente
   onAlternar: () => void
+  chico?: boolean
+  className?: string
 }) {
   const activosPrimero = orden === 'activos'
   return (
@@ -601,13 +605,15 @@ function BotonOrdenEstado({
       onClick={onAlternar}
       aria-label={activosPrimero ? 'Mostrar inactivos primero' : 'Mostrar activos primero'}
       title={activosPrimero ? 'Inactivos primero' : 'Activos primero'}
-      className="inline-flex min-h-11 items-center gap-1 rounded-full bg-black/10 px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-black/10 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+        chico ? 'min-h-10 gap-0.5 px-2.5 text-xs' : 'min-h-11 gap-1 px-3 text-sm'
+      } ${className}`}
     >
       Estado
       {activosPrimero ? (
-        <ChevronUp aria-hidden size={22} strokeWidth={2} />
+        <ChevronUp aria-hidden size={chico ? 16 : 22} strokeWidth={2} />
       ) : (
-        <ChevronDown aria-hidden size={22} strokeWidth={2} />
+        <ChevronDown aria-hidden size={chico ? 16 : 22} strokeWidth={2} />
       )}
     </button>
   )
@@ -650,9 +656,6 @@ function TablaClientes({
               <th scope="col" className="px-4 py-3 font-semibold">
                 Código
               </th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">
-                <BotonOrdenEstado orden={ordenEstado} onAlternar={onOrdenEstado} />
-              </th>
               <th scope="col" className="px-4 py-3 font-semibold">
                 Nombre
               </th>
@@ -661,6 +664,11 @@ function TablaClientes({
               </th>
               <th scope="col" className="px-4 py-3 text-right font-semibold">
                 Saldo a favor
+              </th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 text-center font-semibold">
+                <div className="flex justify-center">
+                  <BotonOrdenEstado orden={ordenEstado} onAlternar={onOrdenEstado} />
+                </div>
               </th>
               <th scope="col" className="px-4 py-3 text-right font-semibold">
                 <span className="sr-only">Acciones</span>
@@ -793,26 +801,6 @@ function FilasCliente({
             {cliente.codigo}
           </button>
         </td>
-        <td className="px-4 py-3">
-          <button
-            ref={refEstado}
-            type="button"
-            disabled={menuBloqueado}
-            aria-expanded={menuAbierto}
-            aria-controls={menuPanelId}
-            aria-label={`Estado de ${cliente.codigo}`}
-            onClick={onAlternarMenu}
-            className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-          >
-            {guardando ? (
-              <span className="inline-flex min-h-11 items-center justify-center rounded-full bg-black/5 px-4 text-sm">
-                Guardando…
-              </span>
-            ) : (
-              <EtiquetaEstado estado={cliente.estado} />
-            )}
-          </button>
-        </td>
         <td className="px-4 py-3">{cliente.nombre ?? 'Sin nombre'}</td>
         <td className="px-4 py-3">
           <a
@@ -823,6 +811,26 @@ function FilasCliente({
           </a>
         </td>
         <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(cliente.saldo_favor)}</td>
+        <td className="px-4 py-3 text-center">
+          <button
+            ref={refEstado}
+            type="button"
+            disabled={menuBloqueado}
+            aria-expanded={menuAbierto}
+            aria-controls={menuPanelId}
+            aria-label={`Estado de ${cliente.codigo}`}
+            onClick={onAlternarMenu}
+            className="inline-flex rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+          >
+            {guardando ? (
+              <span className="inline-flex min-h-11 items-center justify-center rounded-full bg-black/5 px-4 text-sm">
+                Guardando…
+              </span>
+            ) : (
+              <EtiquetaEstado estado={cliente.estado} />
+            )}
+          </button>
+        </td>
         <td className="px-4 py-3 text-right">
           <button
             type="button"
