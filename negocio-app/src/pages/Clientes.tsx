@@ -60,7 +60,7 @@ type Vista =
     }
 
 const toque = { scale: 0.97 }
-const consultaPc = '(min-width: 980px)'
+const consultaPc = '(min-width: 1024px)'
 
 function usePantallaPc() {
   const [esPc, setEsPc] = useState(() => window.matchMedia(consultaPc).matches)
@@ -650,6 +650,9 @@ function TablaClientes({
               <th scope="col" className="px-4 py-3 font-semibold">
                 Código
               </th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">
+                <BotonOrdenEstado orden={ordenEstado} onAlternar={onOrdenEstado} />
+              </th>
               <th scope="col" className="px-4 py-3 font-semibold">
                 Nombre
               </th>
@@ -658,9 +661,6 @@ function TablaClientes({
               </th>
               <th scope="col" className="px-4 py-3 text-right font-semibold">
                 Saldo a favor
-              </th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">
-                <BotonOrdenEstado orden={ordenEstado} onAlternar={onOrdenEstado} />
               </th>
               <th scope="col" className="px-4 py-3 text-right font-semibold">
                 <span className="sr-only">Acciones</span>
@@ -793,16 +793,6 @@ function FilasCliente({
             {cliente.codigo}
           </button>
         </td>
-        <td className="px-4 py-3">{cliente.nombre ?? 'Sin nombre'}</td>
-        <td className="px-4 py-3">
-          <a
-            href={`tel:${cliente.telefono}`}
-            className="underline decoration-black/30 underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-          >
-            {cliente.telefono}
-          </a>
-        </td>
-        <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(cliente.saldo_favor)}</td>
         <td className="px-4 py-3">
           <button
             ref={refEstado}
@@ -823,6 +813,16 @@ function FilasCliente({
             )}
           </button>
         </td>
+        <td className="px-4 py-3">{cliente.nombre ?? 'Sin nombre'}</td>
+        <td className="px-4 py-3">
+          <a
+            href={`tel:${cliente.telefono}`}
+            className="underline decoration-black/30 underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+          >
+            {cliente.telefono}
+          </a>
+        </td>
+        <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(cliente.saldo_favor)}</td>
         <td className="px-4 py-3 text-right">
           <button
             type="button"
