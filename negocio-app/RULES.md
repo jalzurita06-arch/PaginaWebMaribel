@@ -44,6 +44,8 @@ Si hay skills instaladas para este proyecto, léelas antes de escribir código y
    - Si saldo_favor < total: nuevo saldo_favor = 0.
    - Estado del cliente: activo si el nuevo saldo_favor es mayor que 0; inactivo si es 0.
    - Se borran sus canasta_items.
+   - Se borran todos los abonos anteriores del cliente.
+   - Si queda saldo a favor, se registra un abono normal con ese monto y la fecha del envío. No lleva etiqueta especial.
    - Se crea un registro en envios con: fecha, código del cliente, tipo de envío, total de prendas, total y detalle (lista de precio, cantidad y subtotal).
    - El tipo de envío solo sirve para saber por dónde salió. No cambia ningún cálculo.
    - Enviar una canasta vacía no hace nada y muestra un aviso.

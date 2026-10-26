@@ -23,7 +23,7 @@ import { Login } from './pages/Login.tsx'
 import { Mensaje } from './pages/Mensaje.tsx'
 import { Venta } from './pages/Venta.tsx'
 
-const transicionPagina = { duration: 0.25, ease: [0.22, 1, 0.36, 1] } as const
+const transicionPagina = { duration: 0.16, ease: [0.22, 1, 0.36, 1] } as const
 
 function Rutas() {
   const ubicacion = useLocation()
@@ -39,8 +39,8 @@ function Rutas() {
   return (
     <motion.div
       key={ubicacion.pathname}
-      initial={reducirMovimiento ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={reducirMovimiento ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={reducirMovimiento ? { duration: 0 } : transicionPagina}
       className="min-h-dvh w-full"
     >

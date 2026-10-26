@@ -55,6 +55,18 @@ export function reemplazarCache<T>(clave: string, datos: T): void {
   guardarCache(clave, datos)
 }
 
+/** Quita un dato guardado para que la próxima lectura vaya a la base. */
+export function borrarCache(clave: string): void {
+  serie.set(clave, (serie.get(clave) ?? 0) + 1)
+  memoria.delete(clave)
+  escritos.delete(clave)
+  try {
+    localStorage.removeItem(PREFIJO + clave)
+  } catch {
+    // Sin almacenamiento local no hay nada que borrar.
+  }
+}
+
 /** Borra listas guardadas. Una respuesta que todavía viajaba no vuelve a escribir. */
 export function olvidarDatosGuardados(): void {
   memoria.clear()

@@ -8,31 +8,28 @@ import {
   CLAVE_PRECIOS,
   CLAVE_RESUMEN_ABONOS,
   pedirDatos,
+  reemplazarCache,
 } from './cacheLectura.ts'
-import { listarFechasAbono, listarAbonosDeClientes, listarClientes, listarResumenAbonos } from '../services/clientes.ts'
-import { listarCanastasAbiertas, listarEnviosSemana } from '../services/envios.ts'
+import {
+  clientesVentaDe,
+  listarClientesConItems,
+  listarTodosLosAbonos,
+  resumenAbonosDe,
+} from '../services/clientes.ts'
+import { canastasDesdeClientesConItems, listarEnviosSemana } from '../services/envios.ts'
 import { obtenerPlantilla } from '../services/plantilla.ts'
 import { listarPrecios } from '../services/precios.ts'
 
 /**
  * Pide las listas en cuanto hay sesión, para que al abrir una sección ya estén.
- * Con red lenta van de una en una, para no pelearse con la pantalla que se está viendo.
+ * Clientes, canastas y resumen salen de un solo viaje; los abonos, de otro.
+ * Con red lenta van de a bloques, para no pelearse con la pantalla que se está viendo.
  */
 export function precargarDatos(lenta: boolean): void {
   const tareas = [
-    () => pedirDatos(CLAVE_CLIENTES, () => listarClientes()),
+    precargarClientesYCanastas,
+    precargarAbonos,
     () => pedirDatos(CLAVE_PRECIOS, () => listarPrecios()),
-    () => pedirDatos(CLAVE_RESUMEN_ABONOS, () => listarResumenAbonos()),
-    () => pedirDatos(CLAVE_FECHAS_ABONO, () => listarFechasAbono()),
-    async () => {
-      const resultado = await pedirDatos(CLAVE_CANASTAS, () => listarCanastasAbiertas())
-      if (!resultado.ok || resultado.datos.length === 0) return
-      await pedirDatos(
-        CLAVE_ABONOS_CANASTA,
-        () => listarAbonosDeClientes(resultado.datos.map((canasta) => canasta.clienteId)),
-        { fresco: true },
-      )
-    },
     () => pedirDatos(CLAVE_ENVIOS, () => listarEnviosSemana()),
     () => pedirDatos(CLAVE_PLANTILLA, () => obtenerPlantilla()),
   ]
@@ -43,6 +40,21 @@ export function precargarDatos(lenta: boolean): void {
   }
 
   void Promise.all(tareas.map((tarea) => tarea().then(() => undefined, () => undefined)))
+}
+
+async function precargarClientesYCanastas(): Promise<void> {
+  const filas = await listarClientesConItems()
+  if (!filas.ok) return
+  reemplazarCache(CLAVE_CLIENTES, clientesVentaDe(filas.datos))
+  reemplazarCache(CLAVE_RESUMEN_ABONOS, resumenAbonosDe(filas.datos))
+  reemplazarCache(CLAVE_CANASTAS, canastasDesdeClientesConItems(filas.datos))
+}
+
+async function precargarAbonos(): Promise<void> {
+  const abonos = await listarTodosLosAbonos()
+  if (!abonos.ok) return
+  reemplazarCache(CLAVE_FECHAS_ABONO, abonos.datos.fechas)
+  reemplazarCache(CLAVE_ABONOS_CANASTA, abonos.datos.porCliente)
 }
 
 async function enSerie(tareas: Array<() => Promise<unknown>>) {

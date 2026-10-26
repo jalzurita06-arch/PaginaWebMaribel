@@ -7,6 +7,7 @@ import {
 } from '../lib/clienteFormulario.ts'
 import { redondear2 } from '../lib/dinero.ts'
 import {
+  fechaDiaLocal,
   ordenarPorCanasta,
   saldoPendiente,
   saldoTrasEditarAbono,
@@ -35,6 +36,28 @@ export type PrendaCanasta = {
 
 export type ClienteVenta = Cliente & { prendas: number }
 
+export type Abono = {
+  id: string
+  fecha: string
+  monto: number
+}
+
+export type ItemClienteCanasta = {
+  precio: number
+  cantidad: number
+  fecha: string
+}
+
+export type ClienteConItems = ClienteVenta & {
+  items: ItemClienteCanasta[]
+}
+
+export type ResumenClienteAbono = Cliente & {
+  total: number
+  saldo: number
+  prendas: number
+}
+
 export type Resultado<T> = { ok: true; datos: T } | { ok: false; mensaje: string }
 
 export const MENSAJE_CODIGO_REPETIDO = 'Ese código ya existe.'
@@ -43,6 +66,20 @@ const MENSAJE_SIN_CONEXION = 'Sin conexión. Revisa tu internet e inténtalo de 
 const MENSAJE_CONFIG = 'Faltan los datos de conexión. Revisa la configuración de la app.'
 const MENSAJE_NO_ENCONTRADO = 'No se encontró el cliente.'
 const COLUMNAS = 'id, codigo, nombre, telefono, estado, saldo_favor'
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+let vueloClientes: Promise<Resultado<ClienteConItems[]>> | null = null
+let vueloAbonos: Promise<Resultado<FilasAbonoTodas>> | null = null
+
+type FilasAbonoTodas = {
+  porCliente: Record<string, Abono[]>
+  fechas: Record<string, string>
+}
+
+export function esUuid(id: string): boolean {
+  return UUID.test(id.trim())
+}
 
 type ErrorDatos = { code?: string; message?: string }
 
@@ -64,24 +101,50 @@ export function mensajeErrorCliente(error: unknown, accion: string): string {
   return `No se pudo ${accion}. Inténtalo de nuevo.`
 }
 
+/** Una sola lectura: clientes, prendas y fechas de canasta. Las pantallas reutilizan el vuelo. */
+export async function listarClientesConItems(): Promise<Resultado<ClienteConItems[]>> {
+  if (vueloClientes) return vueloClientes
+  vueloClientes = cargarClientesConItems().finally(() => {
+    vueloClientes = null
+  })
+  return vueloClientes
+}
+
+export function clientesVentaDe(filas: ClienteConItems[]): ClienteVenta[] {
+  return filas.map(({ items: _items, ...cliente }) => cliente)
+}
+
+export function resumenAbonosDe(filas: ClienteConItems[]): ResumenClienteAbono[] {
+  return filas.map((fila) => {
+    const total = totalCanasta(fila.items)
+    return {
+      id: fila.id,
+      codigo: fila.codigo,
+      nombre: fila.nombre,
+      telefono: fila.telefono,
+      estado: fila.estado,
+      saldo_favor: fila.saldo_favor,
+      total,
+      saldo: saldoPendiente(total, fila.saldo_favor),
+      prendas: fila.prendas,
+    }
+  })
+}
+
 export async function listarClientes(busqueda?: string): Promise<Resultado<ClienteVenta[]>> {
-  const db = preparar()
-  if (esFallo(db)) return db
-
+  const filas = await listarClientesConItems()
+  if (!filas.ok) return filas
   const termino = busqueda?.trim() ?? ''
-  const base = db.from('clientes').select(`${COLUMNAS}, canasta_items(cantidad)`)
-  const consulta = termino
-    ? base.or(`codigo.ilike."%${escaparFiltro(termino)}%",nombre.ilike."%${escaparFiltro(termino)}%"`)
-    : base
-
-  try {
-    const { data, error } = await consulta.order('codigo', { ascending: true })
-    if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
-    const clientes = leerClientesVenta(data)
-    if (!clientes) return { ok: false, mensaje: 'No se pudo leer la lista de clientes.' }
-    return { ok: true, datos: ordenarPorCanasta(clientes) }
-  } catch (error) {
-    return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
+  const datos = clientesVentaDe(filas.datos)
+  if (!termino) return { ok: true, datos }
+  const consulta = termino.toLocaleLowerCase('es')
+  return {
+    ok: true,
+    datos: datos.filter(
+      (cliente) =>
+        cliente.codigo.toLocaleLowerCase('es').includes(consulta) ||
+        Boolean(cliente.nombre?.toLocaleLowerCase('es').includes(consulta)),
+    ),
   }
 }
 
@@ -92,19 +155,33 @@ export async function listarClientesVenta(busqueda?: string): Promise<Resultado<
 export async function listarResumenAbonos(
   busqueda?: string,
 ): Promise<Resultado<ResumenClienteAbono[]>> {
+  const filas = await listarClientesConItems()
+  if (!filas.ok) return filas
+  const termino = busqueda?.trim() ?? ''
+  const datos = resumenAbonosDe(filas.datos)
+  if (!termino) return { ok: true, datos }
+  const consulta = termino.toLocaleLowerCase('es')
+  return {
+    ok: true,
+    datos: datos.filter(
+      (cliente) =>
+        cliente.codigo.toLocaleLowerCase('es').includes(consulta) ||
+        Boolean(cliente.nombre?.toLocaleLowerCase('es').includes(consulta)),
+    ),
+  }
+}
+
+async function cargarClientesConItems(): Promise<Resultado<ClienteConItems[]>> {
   const db = preparar()
   if (esFallo(db)) return db
 
-  const termino = busqueda?.trim() ?? ''
-  const base = db.from('clientes').select(`${COLUMNAS}, canasta_items(precio, cantidad)`)
-  const consulta = termino
-    ? base.or(`codigo.ilike."%${escaparFiltro(termino)}%",nombre.ilike."%${escaparFiltro(termino)}%"`)
-    : base
-
   try {
-    const { data, error } = await consulta.order('codigo', { ascending: true })
+    const { data, error } = await db
+      .from('clientes')
+      .select(`${COLUMNAS}, canasta_items(precio, cantidad, created_at)`)
+      .order('codigo', { ascending: true })
     if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
-    const clientes = leerResumenes(data)
+    const clientes = leerClientesConItems(data)
     if (!clientes) return { ok: false, mensaje: 'No se pudo leer la lista de clientes.' }
     return { ok: true, datos: ordenarPorCanasta(clientes) }
   } catch (error) {
@@ -113,6 +190,7 @@ export async function listarResumenAbonos(
 }
 
 export async function obtenerCliente(id: string): Promise<Resultado<Cliente>> {
+  if (!esUuid(id)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
   const db = preparar()
   if (esFallo(db)) return db
 
@@ -185,6 +263,7 @@ export async function actualizarCliente(
   id: string,
   cambios: { codigo?: string; nombre?: string | null; telefono?: string },
 ): Promise<Resultado<Cliente>> {
+  if (!esUuid(id)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
   const db = preparar()
   if (esFallo(db)) return db
 
@@ -241,6 +320,7 @@ export async function cambiarEstadoCliente(
   id: string,
   estado: EstadoCliente,
 ): Promise<Resultado<Cliente>> {
+  if (!esUuid(id)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
   const db = preparar()
   if (esFallo(db)) return db
 
@@ -266,6 +346,7 @@ export async function cambiarEstadoCliente(
 }
 
 export async function eliminarCliente(id: string): Promise<Resultado<null>> {
+  if (!esUuid(id)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
   const db = preparar()
   if (esFallo(db)) return db
 
@@ -288,24 +369,13 @@ export async function eliminarCliente(id: string): Promise<Resultado<null>> {
   }
 }
 
-export type Abono = {
-  id: string
-  fecha: string
-  monto: number
-}
-
-export type ResumenClienteAbono = Cliente & {
-  total: number
-  saldo: number
-  prendas: number
-}
-
 /** Registra el abono y suma el monto al saldo. Si el cliente estaba inactivo y queda saldo, pasa a activo. */
 export async function agregarAbono(
   clienteId: string,
   monto: number,
   fecha: string,
 ): Promise<Resultado<Cliente>> {
+  if (!esUuid(clienteId)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
   const db = preparar()
   if (esFallo(db)) return db
 
@@ -371,6 +441,7 @@ export async function agregarAbono(
 }
 
 export async function listarAbonos(clienteId: string): Promise<Resultado<Abono[]>> {
+  if (!esUuid(clienteId)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
   const db = preparar()
   if (esFallo(db)) return db
 
@@ -396,15 +467,50 @@ export async function listarAbonosDeClientes(
   clienteIds: string[],
 ): Promise<Resultado<Record<string, Abono[]>>> {
   if (clienteIds.length === 0) return { ok: true, datos: {} }
+  const todos = await listarTodosLosAbonos()
+  if (!todos.ok) return todos
+  const pedidos = new Set(clienteIds)
+  const porCliente: Record<string, Abono[]> = {}
+  for (const [clienteId, lista] of Object.entries(todos.datos.porCliente)) {
+    if (pedidos.has(clienteId)) porCliente[clienteId] = lista
+  }
+  return { ok: true, datos: porCliente }
+}
 
+/** Fechas de abono de todas las clientas, en un solo viaje, para no esperar la lista. */
+export async function listarFechasAbono(): Promise<Resultado<Record<string, string>>> {
+  const todos = await listarTodosLosAbonos()
+  if (!todos.ok) return todos
+  return { ok: true, datos: todos.datos.fechas }
+}
+
+/** Fecha del último abono de cada clienta. Quien no aparece no tiene abonos. */
+export async function listarUltimosAbonos(clienteIds: string[]): Promise<Resultado<Record<string, string>>> {
+  if (clienteIds.length === 0) return { ok: true, datos: {} }
+  const todos = await listarTodosLosAbonos()
+  if (!todos.ok) return todos
+  const pedidos = new Set(clienteIds)
+  const fechas: Record<string, string> = {}
+  for (const [clienteId, fecha] of Object.entries(todos.datos.fechas)) {
+    if (pedidos.has(clienteId)) fechas[clienteId] = fecha
+  }
+  return { ok: true, datos: fechas }
+}
+
+export async function listarTodosLosAbonos(): Promise<Resultado<FilasAbonoTodas>> {
+  if (vueloAbonos) return vueloAbonos
+  vueloAbonos = cargarTodosLosAbonos().finally(() => {
+    vueloAbonos = null
+  })
+  return vueloAbonos
+}
+
+async function cargarTodosLosAbonos(): Promise<Resultado<FilasAbonoTodas>> {
   const db = preparar()
   if (esFallo(db)) return db
 
   try {
-    const { data, error } = await db
-      .from('abonos')
-      .select('id, cliente_id, fecha, monto')
-      .in('cliente_id', clienteIds)
+    const { data, error } = await db.from('abonos').select('id, cliente_id, fecha, monto')
     if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
     const filas = leerAbonosConCliente(data)
     if (!filas) return { ok: false, mensaje: 'No se pudo leer la lista de abonos.' }
@@ -413,45 +519,13 @@ export async function listarAbonosDeClientes(
     for (const [clienteId, lista] of Object.entries(agrupados)) {
       porCliente[clienteId] = lista.map(({ id, fecha, monto }) => ({ id, fecha, monto }))
     }
-    return { ok: true, datos: porCliente }
-  } catch (error) {
-    return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
-  }
-}
-
-/** Fechas de abono de todas las clientas, en un solo viaje, para no esperar la lista. */
-export async function listarFechasAbono(): Promise<Resultado<Record<string, string>>> {
-  const db = preparar()
-  if (esFallo(db)) return db
-
-  try {
-    const { data, error } = await db
-      .from('abonos')
-      .select('cliente_id, fecha')
-      .order('fecha', { ascending: false })
-      .limit(10000)
-    if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
-    const filas = leerFechasAbono(data)
-    if (!filas) return { ok: false, mensaje: 'No se pudo leer la fecha de los abonos.' }
-    return { ok: true, datos: ultimasFechasAbono(filas) }
-  } catch (error) {
-    return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
-  }
-}
-
-/** Fecha del último abono de cada clienta. Quien no aparece no tiene abonos. */
-export async function listarUltimosAbonos(clienteIds: string[]): Promise<Resultado<Record<string, string>>> {
-  if (clienteIds.length === 0) return { ok: true, datos: {} }
-
-  const db = preparar()
-  if (esFallo(db)) return db
-
-  try {
-    const { data, error } = await db.from('abonos').select('cliente_id, fecha').in('cliente_id', clienteIds)
-    if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
-    const filas = leerFechasAbono(data)
-    if (!filas) return { ok: false, mensaje: 'No se pudo leer la fecha de los abonos.' }
-    return { ok: true, datos: ultimasFechasAbono(filas) }
+    return {
+      ok: true,
+      datos: {
+        porCliente,
+        fechas: ultimasFechasAbono(filas),
+      },
+    }
   } catch (error) {
     return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
   }
@@ -768,62 +842,40 @@ async function filaAbono(
   return { ok: true, datos: { abono, montoCrudo, fechaCruda } }
 }
 
-function leerClientesVenta(data: unknown): ClienteVenta[] | null {
+function leerClientesConItems(data: unknown): ClienteConItems[] | null {
   if (!Array.isArray(data)) return null
-  const clientes: ClienteVenta[] = []
+  const clientes: ClienteConItems[] = []
   for (const fila of data) {
     const cliente = leerCliente(fila)
     if (!cliente || typeof fila !== 'object' || fila === null) return null
-    const prendas = leerCantidadPrendas((fila as Record<string, unknown>).canasta_items)
-    if (prendas == null) return null
-    clientes.push({ ...cliente, prendas })
-  }
-  return clientes
-}
-
-function leerCantidadPrendas(valor: unknown): number | null {
-  if (valor == null) return 0
-  if (!Array.isArray(valor)) return null
-  let prendas = 0
-  for (const fila of valor) {
-    if (typeof fila !== 'object' || fila === null) return null
-    const cantidad = Number((fila as Record<string, unknown>).cantidad)
-    if (!Number.isFinite(cantidad)) return null
-    if (cantidad > 0) prendas += cantidad
-  }
-  return prendas
-}
-
-function leerResumenes(data: unknown): ResumenClienteAbono[] | null {
-  if (!Array.isArray(data)) return null
-  const clientes: ResumenClienteAbono[] = []
-  for (const fila of data) {
-    const cliente = leerCliente(fila)
-    if (!cliente || typeof fila !== 'object' || fila === null) return null
-    const items = leerItemsCanasta((fila as Record<string, unknown>).canasta_items)
+    const items = leerItemsCanastaConFecha((fila as Record<string, unknown>).canasta_items)
     if (!items) return null
-    const total = totalCanasta(items)
     clientes.push({
       ...cliente,
-      total,
-      saldo: saldoPendiente(total, cliente.saldo_favor),
       prendas: totalPrendas(items),
+      items,
     })
   }
   return clientes
 }
 
-function leerItemsCanasta(valor: unknown): { precio: number; cantidad: number }[] | null {
+function leerItemsCanastaConFecha(valor: unknown): ItemClienteCanasta[] | null {
   if (valor == null) return []
   if (!Array.isArray(valor)) return null
-  const items: { precio: number; cantidad: number }[] = []
+  const items: ItemClienteCanasta[] = []
   for (const fila of valor) {
     if (typeof fila !== 'object' || fila === null) return null
-    const precio = Number((fila as Record<string, unknown>).precio)
-    const cantidad = Number((fila as Record<string, unknown>).cantidad)
+    const datos = fila as Record<string, unknown>
+    const precio = Number(datos.precio)
+    const cantidad = Number(datos.cantidad)
     if (!Number.isFinite(precio) || !Number.isFinite(cantidad)) return null
-    if (cantidad <= 0) continue
-    items.push({ precio: redondear2(precio), cantidad })
+    if (!(cantidad > 0)) continue
+    const created = typeof datos.created_at === 'string' ? datos.created_at : ''
+    items.push({
+      precio: redondear2(precio),
+      cantidad,
+      fecha: created ? fechaDiaLocal(created) : '',
+    })
   }
   return items
 }
@@ -866,20 +918,6 @@ function leerAbonosConCliente(
     const abono = abonos[0]
     if (!abono) return null
     filas.push({ clienteId, ...abono })
-  }
-  return filas
-}
-
-function leerFechasAbono(data: unknown): { clienteId: string; fecha: string }[] | null {
-  if (!Array.isArray(data)) return null
-  const filas: { clienteId: string; fecha: string }[] = []
-  for (const valor of data) {
-    if (typeof valor !== 'object' || valor === null) return null
-    const fila = valor as Record<string, unknown>
-    const clienteId = typeof fila.cliente_id === 'string' ? fila.cliente_id : ''
-    const fecha = typeof fila.fecha === 'string' ? fila.fecha.slice(0, 10) : ''
-    if (!clienteId || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return null
-    filas.push({ clienteId, fecha })
   }
   return filas
 }
@@ -931,10 +969,6 @@ function fechaValida(fecha: string): boolean {
 
 function escaparIlike(valor: string): string {
   return valor.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
-}
-
-function escaparFiltro(valor: string): string {
-  return escaparIlike(valor).replace(/"/g, '')
 }
 
 function leerError(error: unknown): ErrorDatos {

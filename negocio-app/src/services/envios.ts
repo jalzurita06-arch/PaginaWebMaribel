@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { formatearDolares, redondear2 } from '../lib/dinero.ts'
 import {
+  abonoTrasCerrarCanasta,
   agruparPorDia,
   agruparPorPrecio,
   calcularEnvio,
@@ -15,7 +16,13 @@ import {
   type ItemCanastaDia,
 } from '../lib/reglas.ts'
 import { supabase } from '../lib/supabase.ts'
-import type { EstadoCliente, Resultado } from './clientes.ts'
+import {
+  esUuid,
+  listarClientesConItems,
+  type ClienteConItems,
+  type EstadoCliente,
+  type Resultado,
+} from './clientes.ts'
 
 export const MENSAJE_CANASTA_VACIA = 'La canasta está vacía. No hay nada que enviar.'
 
@@ -28,6 +35,8 @@ const MENSAJE_RECUPERAR =
   'El envío no se guardó y no se pudo dejar la canasta como estaba. Revisa a la clienta antes de intentar de nuevo.'
 const MENSAJE_SALDO_SIN_ENVIO =
   'El saldo cambió, pero la canasta no se envió. Revisa a la clienta antes de intentar de nuevo.'
+const MENSAJE_ABONOS_SIN_ENVIO =
+  'El historial de abonos cambió, pero la canasta no se envió. Revisa a la clienta antes de intentar de nuevo.'
 
 export const TIPOS_ENVIO = ['local', 'uber', 'servientrega'] as const
 export type TipoEnvio = (typeof TIPOS_ENVIO)[number]
@@ -83,6 +92,12 @@ type ItemGuardado = {
   fecha: string
 }
 
+type AbonoGuardado = {
+  id: string
+  monto: number | string
+  fecha: string
+}
+
 type ClienteEnvio = {
   id: string
   codigo: string
@@ -90,6 +105,7 @@ type ClienteEnvio = {
   saldoCrudo: number | string
   saldoFavor: number
   items: ItemGuardado[]
+  abonos: AbonoGuardado[]
 }
 
 /** Traduce un error de la base a un mensaje que se puede mostrar. */
@@ -225,22 +241,29 @@ export function agruparCanastasAbiertas(filas: FilaAgrupable[]): CanastaAbierta[
   )
 }
 
-export async function listarCanastasAbiertas(): Promise<Resultado<CanastaAbierta[]>> {
-  const db = preparar()
-  if (esFallo(db)) return db
-
-  try {
-    const { data, error } = await db
-      .from('canasta_items')
-      .select('precio, cantidad, created_at, clientes(id, codigo, nombre, telefono, saldo_favor)')
-
-    if (error) return { ok: false, mensaje: mensajeErrorEnvio(error, 'cargar las canastas') }
-    const filas = leerFilasCanasta(data)
-    if (!filas) return { ok: false, mensaje: 'No se pudieron leer las canastas.' }
-    return { ok: true, datos: agruparCanastasAbiertas(filas) }
-  } catch (error) {
-    return { ok: false, mensaje: mensajeErrorEnvio(error, 'cargar las canastas') }
+export function canastasDesdeClientesConItems(filas: ClienteConItems[]): CanastaAbierta[] {
+  const agrupables: FilaAgrupable[] = []
+  for (const cliente of filas) {
+    for (const item of cliente.items) {
+      agrupables.push({
+        clienteId: cliente.id,
+        codigo: cliente.codigo,
+        nombre: cliente.nombre,
+        telefono: cliente.telefono,
+        saldoFavor: cliente.saldo_favor,
+        precio: item.precio,
+        cantidad: item.cantidad,
+        fecha: item.fecha,
+      })
+    }
   }
+  return agruparCanastasAbiertas(agrupables)
+}
+
+export async function listarCanastasAbiertas(): Promise<Resultado<CanastaAbierta[]>> {
+  const filas = await listarClientesConItems()
+  if (!filas.ok) return filas
+  return { ok: true, datos: canastasDesdeClientesConItems(filas.datos) }
 }
 
 /**
@@ -254,11 +277,12 @@ export async function registrarEnvio(
   const db = preparar()
   if (esFallo(db)) return db
   if (!esTipoEnvio(tipo)) return { ok: false, mensaje: 'Elige Local, Uber o Servientrega.' }
-  if (!clienteId.trim()) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
+  if (!esUuid(clienteId)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
 
   let cliente: ClienteEnvio | null = null
   let saldoCambiado = false
   let canastaBorrada = false
+  let historialAbonosCambiado = false
 
   try {
     const leido = await leerClienteYCanasta(db, clienteId)
@@ -294,7 +318,7 @@ export async function registrarEnvio(
       .select('id')
 
     if (errorBorrado || !borrados?.length) {
-      const deshecho = await deshacerEnvio(db, cliente, saldoCambiado, false)
+      const deshecho = await deshacerEnvio(db, cliente, saldoCambiado, false, false)
       if (!deshecho) return { ok: false, mensaje: MENSAJE_SALDO_SIN_ENVIO }
       return {
         ok: false,
@@ -304,6 +328,25 @@ export async function registrarEnvio(
     canastaBorrada = true
 
     const fecha = fechaHoy()
+    const historial = await reemplazarHistorialAbonos(
+      db,
+      clienteId,
+      cliente.abonos,
+      registro.datos.nuevoSaldoFavor,
+      fecha,
+    )
+    if (!historial.ok) {
+      const deshecho = await deshacerEnvio(db, cliente, true, true, historial.cambiado)
+      if (!deshecho) {
+        return {
+          ok: false,
+          mensaje: historial.cambiado ? MENSAJE_ABONOS_SIN_ENVIO : MENSAJE_RECUPERAR,
+        }
+      }
+      return { ok: false, mensaje: historial.mensaje }
+    }
+    historialAbonosCambiado = historial.cambiado
+
     const { data: creado, error: errorEnvio } = await db
       .from('envios')
       .insert({
@@ -319,7 +362,7 @@ export async function registrarEnvio(
       .single()
 
     if (errorEnvio || !creado) {
-      const deshecho = await deshacerEnvio(db, cliente, true, true)
+      const deshecho = await deshacerEnvio(db, cliente, true, true, historialAbonosCambiado)
       if (!deshecho) return { ok: false, mensaje: MENSAJE_RECUPERAR }
       return {
         ok: false,
@@ -349,8 +392,14 @@ export async function registrarEnvio(
       },
     }
   } catch (error) {
-    if (cliente && (saldoCambiado || canastaBorrada)) {
-      const deshecho = await deshacerEnvio(db, cliente, saldoCambiado, canastaBorrada)
+    if (cliente && (saldoCambiado || canastaBorrada || historialAbonosCambiado)) {
+      const deshecho = await deshacerEnvio(
+        db,
+        cliente,
+        saldoCambiado,
+        canastaBorrada,
+        historialAbonosCambiado,
+      )
       if (!deshecho) return { ok: false, mensaje: MENSAJE_RECUPERAR }
     }
     return { ok: false, mensaje: mensajeErrorEnvio(error, 'registrar el envío') }
@@ -399,7 +448,9 @@ async function leerClienteYCanasta(
 ): Promise<Resultado<ClienteEnvio>> {
   const { data, error } = await db
     .from('clientes')
-    .select('id, codigo, estado, saldo_favor, canasta_items(id, precio, cantidad, created_at)')
+    .select(
+      'id, codigo, estado, saldo_favor, canasta_items(id, precio, cantidad, created_at), abonos(id, monto, fecha)',
+    )
     .eq('id', clienteId)
     .maybeSingle()
 
@@ -409,18 +460,60 @@ async function leerClienteYCanasta(
   return { ok: true, datos: cliente }
 }
 
+async function reemplazarHistorialAbonos(
+  db: SupabaseClient,
+  clienteId: string,
+  abonosAnteriores: AbonoGuardado[],
+  nuevoSaldoFavor: number,
+  fechaCierre: string,
+): Promise<{ ok: true; cambiado: boolean } | { ok: false; mensaje: string; cambiado: boolean }> {
+  const sobrante = abonoTrasCerrarCanasta(nuevoSaldoFavor, fechaCierre)
+  if (abonosAnteriores.length === 0 && sobrante == null) {
+    return { ok: true, cambiado: false }
+  }
+
+  const { error: errorBorrado } = await db.from('abonos').delete().eq('cliente_id', clienteId)
+  if (errorBorrado) {
+    return {
+      ok: false,
+      mensaje: mensajeErrorEnvio(errorBorrado, 'actualizar los abonos'),
+      cambiado: false,
+    }
+  }
+
+  if (sobrante == null) return { ok: true, cambiado: true }
+
+  const { error: errorInsert } = await db.from('abonos').insert({
+    cliente_id: clienteId,
+    monto: sobrante.monto,
+    fecha: sobrante.fecha,
+  })
+  if (errorInsert) {
+    return {
+      ok: false,
+      mensaje: mensajeErrorEnvio(errorInsert, 'registrar el abono restante'),
+      cambiado: true,
+    }
+  }
+  return { ok: true, cambiado: true }
+}
+
 async function deshacerEnvio(
   db: SupabaseClient,
   cliente: ClienteEnvio,
   saldoCambiado: boolean,
   canastaBorrada: boolean,
+  historialAbonosCambiado: boolean,
 ): Promise<boolean> {
   try {
     const canastaOk = canastaBorrada ? await restaurarCanasta(db, cliente.id, cliente.items) : true
     const saldoOk = saldoCambiado
       ? await restaurarCliente(db, cliente.id, cliente.saldoCrudo, cliente.estado)
       : true
-    return canastaOk && saldoOk
+    const abonosOk = historialAbonosCambiado
+      ? await restaurarAbonos(db, cliente.id, cliente.abonos)
+      : true
+    return canastaOk && saldoOk && abonosOk
   } catch {
     return false
   }
@@ -438,6 +531,25 @@ async function restaurarCliente(
     .eq('id', clienteId)
     .select('id')
   return !error && !!data?.length
+}
+
+async function restaurarAbonos(
+  db: SupabaseClient,
+  clienteId: string,
+  abonos: AbonoGuardado[],
+): Promise<boolean> {
+  const { error: errorBorrado } = await db.from('abonos').delete().eq('cliente_id', clienteId)
+  if (errorBorrado) return false
+  if (abonos.length === 0) return true
+  const { error } = await db.from('abonos').insert(
+    abonos.map((abono) => ({
+      id: abono.id,
+      cliente_id: clienteId,
+      monto: abono.monto,
+      fecha: abono.fecha,
+    })),
+  )
+  return !error
 }
 
 async function restaurarCanasta(
@@ -471,60 +583,6 @@ function esFallo(
   return 'mensaje' in valor
 }
 
-function leerFilasCanasta(data: unknown): FilaAgrupable[] | null {
-  if (!Array.isArray(data)) return null
-  const filas: FilaAgrupable[] = []
-
-  for (const valor of data) {
-    if (typeof valor !== 'object' || valor === null) return null
-    const fila = valor as Record<string, unknown>
-    const precio = Number(fila.precio)
-    const cantidad = Number(fila.cantidad)
-    if (!Number.isFinite(precio) || !Number.isFinite(cantidad)) return null
-
-    const cliente = clienteEmbebido(fila.clientes)
-    if (cliente === 'invalido') return null
-    if (!cliente) continue
-
-    filas.push({
-      clienteId: cliente.id,
-      codigo: cliente.codigo,
-      nombre: cliente.nombre,
-      telefono: cliente.telefono,
-      saldoFavor: cliente.saldoFavor,
-      precio: redondear2(precio),
-      cantidad,
-      fecha: fechaDeItem(fila.created_at),
-    })
-  }
-
-  return filas
-}
-
-function clienteEmbebido(
-  valor: unknown,
-): { id: string; codigo: string; nombre: string | null; telefono: string; saldoFavor: number } | null | 'invalido' {
-  const fila = Array.isArray(valor) ? valor[0] : valor
-  if (fila == null) return null
-  if (typeof fila !== 'object') return 'invalido'
-  const datos = fila as Record<string, unknown>
-  if (typeof datos.id !== 'string' || typeof datos.codigo !== 'string') return 'invalido'
-  if (!(datos.nombre === null || datos.nombre === undefined || typeof datos.nombre === 'string')) {
-    return 'invalido'
-  }
-  if (typeof datos.telefono !== 'string') return 'invalido'
-  const saldo = Number(datos.saldo_favor)
-  if (!Number.isFinite(saldo)) return 'invalido'
-  const nombre = typeof datos.nombre === 'string' && datos.nombre.trim() ? datos.nombre.trim() : null
-  return {
-    id: datos.id,
-    codigo: datos.codigo,
-    nombre,
-    telefono: datos.telefono,
-    saldoFavor: redondear2(Math.max(0, saldo)),
-  }
-}
-
 function leerClienteEnvio(valor: unknown): ClienteEnvio | null {
   if (typeof valor !== 'object' || valor === null) return null
   const fila = valor as Record<string, unknown>
@@ -536,6 +594,8 @@ function leerClienteEnvio(valor: unknown): ClienteEnvio | null {
   if (!Number.isFinite(saldo)) return null
   const items = fila.canasta_items == null ? [] : leerItems(fila.canasta_items)
   if (!items) return null
+  const abonos = fila.abonos == null ? [] : leerAbonosGuardados(fila.abonos)
+  if (!abonos) return null
 
   return {
     id: fila.id,
@@ -544,7 +604,22 @@ function leerClienteEnvio(valor: unknown): ClienteEnvio | null {
     saldoCrudo: fila.saldo_favor,
     saldoFavor: redondear2(Math.max(0, saldo)),
     items,
+    abonos,
   }
+}
+
+function leerAbonosGuardados(data: unknown): AbonoGuardado[] | null {
+  if (!Array.isArray(data)) return null
+  const abonos: AbonoGuardado[] = []
+  for (const valor of data) {
+    if (typeof valor !== 'object' || valor === null) return null
+    const fila = valor as Record<string, unknown>
+    if (typeof fila.id !== 'string' || !fila.id) return null
+    if (typeof fila.fecha !== 'string' || !fila.fecha) return null
+    if (typeof fila.monto !== 'number' && typeof fila.monto !== 'string') return null
+    abonos.push({ id: fila.id, monto: fila.monto, fecha: fila.fecha })
+  }
+  return abonos
 }
 
 function leerItems(data: unknown): ItemGuardado[] | null {

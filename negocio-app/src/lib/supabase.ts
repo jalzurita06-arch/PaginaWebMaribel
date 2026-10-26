@@ -14,4 +14,12 @@ if (!url || !clave) {
  * Sin opciones de auth: la sesión usa la persistencia por defecto de supabase-js (localStorage).
  */
 export const supabase: SupabaseClient | null =
-  url && clave ? createClient(url, clave) : null
+  url && clave
+    ? createClient(url, clave, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: false,
+        },
+      })
+    : null

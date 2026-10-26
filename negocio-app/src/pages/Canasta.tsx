@@ -16,6 +16,8 @@ import {
   CLAVE_ABONOS_CANASTA,
   CLAVE_CANASTAS,
   CLAVE_ENVIOS,
+  borrarCache,
+  claveDetalleAbono,
   leerCache,
   pedirDatos,
   reemplazarCache,
@@ -306,6 +308,13 @@ export function Canasta() {
     generacion.current += 1
     if (siguientesCanastas) reemplazarCache(CLAVE_CANASTAS, siguientesCanastas)
     if (siguientesEnvios) reemplazarCache(CLAVE_ENVIOS, siguientesEnvios)
+    setAbonosPorCliente((actual) => {
+      const siguientes = { ...actual }
+      delete siguientes[canasta.clienteId]
+      reemplazarCache(CLAVE_ABONOS_CANASTA, siguientes)
+      return siguientes
+    })
+    borrarCache(claveDetalleAbono(canasta.clienteId))
     setSelector(null)
     setAbiertaId((actual) => (actual === canasta.clienteId ? null : actual))
     setErrorHistorial(null)

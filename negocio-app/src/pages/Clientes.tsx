@@ -1,11 +1,14 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { PanelDesplegable, transicionDesplegar, VistaAnimada } from '../components/PanelDesplegable.tsx'
+import { PanelDesplegable, VistaAnimada } from '../components/PanelDesplegable.tsx'
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { Aviso } from '../components/Aviso.tsx'
 import { DetalleCliente } from '../components/DetalleCliente.tsx'
-import { EtiquetaEstado } from '../components/EtiquetaEstado.tsx'
+import {
+  BotonEtiquetaEstado,
+  MenuEstadoFlotante,
+  OpcionesEstadoCliente,
+} from '../components/MenuEstadoCliente.tsx'
 import { FormularioAbono } from '../components/FormularioAbono.tsx'
 import { FormularioCliente } from '../components/FormularioCliente.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
@@ -428,23 +431,16 @@ export function Clientes() {
                   <span className="text-lg">{formatearDolares(cliente.saldo_favor)}</span>
                 </motion.button>
                 <div className="flex w-36 shrink-0 flex-col gap-2">
-                  <button
-                    type="button"
+                  <BotonEtiquetaEstado
+                    codigo={cliente.codigo}
+                    estado={cliente.estado}
+                    abierto={menuId === cliente.id}
+                    guardando={cambiandoId === cliente.id}
                     disabled={cambiandoId !== null}
-                    aria-expanded={menuId === cliente.id}
-                    aria-controls={`estado-${cliente.id}`}
-                    aria-label={`Estado de ${cliente.codigo}`}
+                    panelId={`estado-${cliente.id}`}
+                    anchoCompleto
                     onClick={() => setMenuId(menuId === cliente.id ? null : cliente.id)}
-                    className="w-full rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-                  >
-                    {cambiandoId === cliente.id ? (
-                      <span className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-black/5 px-3 text-sm">
-                        Guardando…
-                      </span>
-                    ) : (
-                      <EtiquetaEstado estado={cliente.estado} className="w-full justify-center" />
-                    )}
-                  </button>
+                  />
                   <button
                     type="button"
                     disabled={!enLinea}
@@ -460,39 +456,14 @@ export function Clientes() {
                 </div>
                 </div>
                 <PanelDesplegable abierto={menuId === cliente.id}>
-                  <div
+                  <OpcionesEstadoCliente
                     id={`estado-${cliente.id}`}
-                    role="group"
-                    aria-label={`Elige el estado de ${cliente.codigo}`}
-                    className="flex flex-col gap-2"
-                  >
-                    <button
-                      type="button"
-                      disabled={!enLinea}
-                      aria-pressed={cliente.estado === 'activo'}
-                      onClick={() => void elegirEstado(cliente, 'activo')}
-                      className="min-h-12 rounded-full bg-afirmar px-5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-                    >
-                      Activo
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!enLinea}
-                      aria-pressed={cliente.estado === 'inactivo'}
-                      onClick={() => void elegirEstado(cliente, 'inactivo')}
-                      className="min-h-12 rounded-full bg-peligro px-5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-                    >
-                      Inactivo
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!enLinea}
-                      onClick={() => void prepararBorrado(cliente, 'lista', 'bloquear')}
-                      className="min-h-12 rounded-full bg-borrar px-5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-                    >
-                      Bloqueado
-                    </button>
-                  </div>
+                    codigo={cliente.codigo}
+                    estado={cliente.estado}
+                    enLinea={enLinea}
+                    onElegirEstado={(estado) => void elegirEstado(cliente, estado)}
+                    onBloquear={() => void prepararBorrado(cliente, 'lista', 'bloquear')}
+                  />
                 </PanelDesplegable>
               </li>
             ))}
@@ -723,61 +694,6 @@ function FilasCliente({
 }) {
   const menuPanelId = `estado-${cliente.id}`
   const refEstado = useRef<HTMLButtonElement>(null)
-  const refMenu = useRef<HTMLDivElement>(null)
-  const reducirMovimiento = useReducedMotion()
-  const salto = reducirMovimiento === true
-
-  useLayoutEffect(() => {
-    if (!menuAbierto) return
-
-    function colocar() {
-      const boton = refEstado.current
-      const menu = refMenu.current
-      if (!boton || !menu) return
-      const origen = boton.getBoundingClientRect()
-      const caja = menu.getBoundingClientRect()
-      let top = origen.top - caja.height - 8
-      if (top < 8) top = origen.bottom + 8
-      let left = origen.left + origen.width / 2 - caja.width / 2
-      left = Math.min(Math.max(8, left), window.innerWidth - caja.width - 8)
-      menu.style.top = `${top}px`
-      menu.style.left = `${left}px`
-      menu.style.visibility = 'visible'
-    }
-
-    colocar()
-    window.addEventListener('resize', colocar)
-    window.addEventListener('scroll', colocar, true)
-    return () => {
-      window.removeEventListener('resize', colocar)
-      window.removeEventListener('scroll', colocar, true)
-    }
-  }, [menuAbierto])
-
-  useEffect(() => {
-    if (!menuAbierto) return
-    refMenu.current?.querySelector('button')?.focus()
-  }, [menuAbierto])
-
-  useEffect(() => {
-    if (!menuAbierto) return
-
-    function cerrar(evento: KeyboardEvent) {
-      if (evento.key === 'Escape') onAlternarMenu()
-    }
-    function clicFuera(evento: PointerEvent) {
-      const destino = evento.target
-      if (!(destino instanceof Node)) return
-      if (refEstado.current?.contains(destino) || refMenu.current?.contains(destino)) return
-      onAlternarMenu()
-    }
-    window.addEventListener('keydown', cerrar)
-    window.addEventListener('pointerdown', clicFuera)
-    return () => {
-      window.removeEventListener('keydown', cerrar)
-      window.removeEventListener('pointerdown', clicFuera)
-    }
-  }, [menuAbierto, onAlternarMenu])
 
   function abrirSiEsDato(evento: MouseEvent<HTMLTableRowElement>) {
     const destino = evento.target
@@ -812,24 +728,16 @@ function FilasCliente({
         </td>
         <td className="px-4 py-3 text-right tabular-nums">{formatearDolares(cliente.saldo_favor)}</td>
         <td className="px-4 py-3 text-center">
-          <button
-            ref={refEstado}
-            type="button"
+          <BotonEtiquetaEstado
+            botonRef={refEstado}
+            codigo={cliente.codigo}
+            estado={cliente.estado}
+            abierto={menuAbierto}
+            guardando={guardando}
             disabled={menuBloqueado}
-            aria-expanded={menuAbierto}
-            aria-controls={menuPanelId}
-            aria-label={`Estado de ${cliente.codigo}`}
+            panelId={menuPanelId}
             onClick={onAlternarMenu}
-            className="inline-flex rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-          >
-            {guardando ? (
-              <span className="inline-flex min-h-11 items-center justify-center rounded-full bg-black/5 px-4 text-sm">
-                Guardando…
-              </span>
-            ) : (
-              <EtiquetaEstado estado={cliente.estado} />
-            )}
-          </button>
+          />
         </td>
         <td className="px-4 py-3 text-right">
           <button
@@ -842,49 +750,21 @@ function FilasCliente({
           </button>
         </td>
       </tr>
-      {menuAbierto
-        ? createPortal(
-            <motion.div
-              ref={refMenu}
-              id={menuPanelId}
-              role="group"
-              aria-label={`Elige el estado de ${cliente.codigo}`}
-              initial={salto ? false : { opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={salto ? { duration: 0 } : transicionDesplegar}
-              className="fixed z-30 flex w-40 flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
-              style={{ top: 0, left: 0, visibility: 'hidden' }}
-            >
-              <button
-                type="button"
-                disabled={!enLinea}
-                aria-pressed={cliente.estado === 'activo'}
-                onClick={() => onElegirEstado('activo')}
-                className="min-h-11 rounded-full bg-afirmar px-5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-              >
-                Activo
-              </button>
-              <button
-                type="button"
-                disabled={!enLinea}
-                aria-pressed={cliente.estado === 'inactivo'}
-                onClick={() => onElegirEstado('inactivo')}
-                className="min-h-11 rounded-full bg-peligro px-5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-              >
-                Inactivo
-              </button>
-              <button
-                type="button"
-                disabled={!enLinea}
-                onClick={onBloquear}
-                className="min-h-11 rounded-full bg-borrar px-5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-              >
-                Bloqueado
-              </button>
-            </motion.div>,
-            document.body,
-          )
-        : null}
+      <MenuEstadoFlotante
+        abierto={menuAbierto}
+        panelId={menuPanelId}
+        anclaRef={refEstado}
+        onCerrar={onAlternarMenu}
+      >
+        <OpcionesEstadoCliente
+          codigo={cliente.codigo}
+          estado={cliente.estado}
+          enLinea={enLinea}
+          compacto
+          onElegirEstado={onElegirEstado}
+          onBloquear={onBloquear}
+        />
+      </MenuEstadoFlotante>
     </>
   )
 }

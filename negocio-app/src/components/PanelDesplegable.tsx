@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { ReactNode } from 'react'
 
-export const transicionDesplegar = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const
+export const transicionDesplegar = { duration: 0.2, ease: [0.22, 1, 0.36, 1] } as const
 
 export function VistaAnimada({
   vistaKey,
@@ -18,9 +18,9 @@ export function VistaAnimada({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={vistaKey}
-        initial={salto ? false : { opacity: 0, y: 16 }}
+        initial={salto ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={salto ? { opacity: 0 } : { opacity: 0, y: -16 }}
+        exit={salto ? { opacity: 0 } : { opacity: 0, y: -8 }}
         transition={salto ? { duration: 0 } : transicionDesplegar}
         className={className}
       >

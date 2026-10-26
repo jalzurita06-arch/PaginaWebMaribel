@@ -60,6 +60,19 @@ export function calcularEnvio(total: number, saldoFavor: number): ResultadoEnvio
   }
 }
 
+/**
+ * Tras enviar, el historial de abonos se borra.
+ * Si sobra dinero, queda un abono normal con ese monto y la fecha del cierre.
+ */
+export function abonoTrasCerrarCanasta(
+  nuevoSaldoFavor: number,
+  fechaCierre: string,
+): { monto: number; fecha: string } | null {
+  const monto = redondear2(Math.max(0, nuevoSaldoFavor))
+  if (monto <= 0) return null
+  return { monto, fecha: fechaCierre }
+}
+
 export function agruparPorPrecio(items: ItemCanasta[]): GrupoPrecio[] {
   const cantidades = new Map<number, number>()
 

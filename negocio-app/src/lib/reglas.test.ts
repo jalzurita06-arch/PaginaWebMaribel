@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   agruparPorDia,
   agruparPorPrecio,
+  abonoTrasCerrarCanasta,
   calcularEnvio,
   excedenteAbono,
   fechaDiaLocal,
@@ -53,7 +54,27 @@ describe('reglas de la canasta', () => {
       nuevoEstado: 'activo',
     })
   })
+})
 
+describe('abonoTrasCerrarCanasta', () => {
+  it('no deja abono si el envío no deja saldo a favor', () => {
+    expect(abonoTrasCerrarCanasta(0, '2026-10-25')).toBeNull()
+    expect(abonoTrasCerrarCanasta(-3, '2026-10-25')).toBeNull()
+  })
+
+  it('deja un abono normal con el sobrante y la fecha del cierre', () => {
+    expect(abonoTrasCerrarCanasta(5, '2026-10-25')).toEqual({
+      monto: 5,
+      fecha: '2026-10-25',
+    })
+    expect(abonoTrasCerrarCanasta(5.555, '2026-10-25')).toEqual({
+      monto: 5.56,
+      fecha: '2026-10-25',
+    })
+  })
+})
+
+describe('reglas de agrupación', () => {
   it('suma 3.50 y 7.5 y da 11, sin error de punto flotante', () => {
     expect(
       totalCanasta([

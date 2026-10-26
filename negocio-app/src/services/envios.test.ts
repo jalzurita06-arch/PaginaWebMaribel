@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MENSAJE_CANASTA_VACIA,
   agruparCanastasAbiertas,
+  canastasDesdeClientesConItems,
   armarRegistroEnvio,
   envioEsAntiguo,
   esTipoEnvio,
@@ -127,6 +128,39 @@ describe('armarRegistroEnvio', () => {
         ],
       },
     })
+  })
+})
+
+describe('canastasDesdeClientesConItems', () => {
+  it('arma las canastas abiertas desde el bloque de clientes', () => {
+    const canastas = canastasDesdeClientesConItems([
+      {
+        id: '1',
+        codigo: 'A',
+        nombre: 'Ana',
+        telefono: '0992222222',
+        estado: 'activo',
+        saldo_favor: 10,
+        prendas: 3,
+        items: [
+          { precio: 5, cantidad: 2, fecha: '2026-10-15' },
+          { precio: 5, cantidad: 1, fecha: '2026-10-14' },
+        ],
+      },
+      {
+        id: '2',
+        codigo: 'Z',
+        nombre: null,
+        telefono: '0991111111',
+        estado: 'activo',
+        saldo_favor: 0,
+        prendas: 0,
+        items: [],
+      },
+    ])
+    expect(canastas.map((canasta) => canasta.codigo)).toEqual(['A'])
+    expect(canastas[0]?.total).toBe(15)
+    expect(canastas[0]?.saldo).toBe(5)
   })
 })
 

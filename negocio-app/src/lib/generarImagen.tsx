@@ -11,13 +11,16 @@ import type { ItemCanasta } from './reglas.ts'
 
 /** Lee la canasta, o solo la venta indicada, y arma el PNG. No guarda ni modifica ningún dato. */
 export async function generarImagen(clienteId: string, venta?: ItemCanasta[]): Promise<Blob> {
-  const cliente = await obtenerCliente(clienteId)
+  const [cliente, plantilla, canasta] = await Promise.all([
+    obtenerCliente(clienteId),
+    obtenerPlantilla(),
+    venta ? Promise.resolve(null) : obtenerCanasta(clienteId),
+  ])
   if (!cliente.ok) throw new Error(cliente.mensaje)
 
   let items = venta
   if (!items) {
-    const canasta = await obtenerCanasta(clienteId)
-    if (!canasta.ok) throw new Error(canasta.mensaje)
+    if (!canasta || !canasta.ok) throw new Error(canasta && !canasta.ok ? canasta.mensaje : 'No se pudo leer la canasta.')
     items = canasta.datos
   }
 
@@ -26,7 +29,6 @@ export async function generarImagen(clienteId: string, venta?: ItemCanasta[]): P
   }
 
   const resumen = resumenPedido(items, cliente.datos.saldo_favor)
-  const plantilla = await obtenerPlantilla()
   const bloques = plantilla.ok ? plantilla.datos.bloquesImagen : PLANTILLA_INICIAL.bloquesImagen
   const contenedor = document.createElement('div')
   contenedor.setAttribute('aria-hidden', 'true')

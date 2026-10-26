@@ -1,12 +1,18 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Minus, Plus, Shirt, ShoppingBasket } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
-import { EtiquetaEstado } from '../components/EtiquetaEstado.tsx'
+import { DetalleCliente } from '../components/DetalleCliente.tsx'
 import { FormularioAbono } from '../components/FormularioAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
+import {
+  BotonEtiquetaEstado,
+  MenuEstadoFlotante,
+  OpcionesEstadoCliente,
+} from '../components/MenuEstadoCliente.tsx'
+import { PanelDesplegable } from '../components/PanelDesplegable.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
 import {
@@ -17,6 +23,7 @@ import {
   leerCache,
   olvidarDatosGuardados,
   pedirDatos,
+  reemplazarCache,
 } from '../lib/cacheLectura.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
 import { codificarVenta } from '../lib/compartir.ts'
@@ -36,10 +43,15 @@ import {
 } from '../services/canasta.ts'
 import {
   agregarAbono,
+  cambiarEstadoCliente,
+  eliminarCliente,
+  listarCanastaCliente,
   listarClientes,
   obtenerCliente,
   type Cliente,
   type ClienteVenta,
+  type EstadoCliente,
+  type PrendaCanasta,
   type Resultado,
 } from '../services/clientes.ts'
 import { listarPrecios, type Precio } from '../services/precios.ts'
@@ -47,6 +59,7 @@ import { listarPrecios, type Precio } from '../services/precios.ts'
 type Paso = 'buscar' | 'prendas' | 'resumen' | 'confirmado'
 type AvisoEstado = { texto: string; tono: 'ok' | 'error' }
 type LineaTemporal = { id: string; precio: number; cantidad: number }
+type ConfirmacionBloqueo = { cliente: Cliente; prendas: PrendaCanasta[] | null }
 
 const titulos: Record<Paso, string> = {
   buscar: 'Buscar cliente',
@@ -126,6 +139,11 @@ export function Venta() {
   const [guardando, setGuardando] = useState(false)
   const [guardandoAbono, setGuardandoAbono] = useState(false)
   const [restaurando, setRestaurando] = useState(() => leerMenuVenta() != null)
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const [cambiandoId, setCambiandoId] = useState<string | null>(null)
+  const [ocupadoEstado, setOcupadoEstado] = useState(false)
+  const [confirmacion, setConfirmacion] = useState<ConfirmacionBloqueo | null>(null)
+  const accionEstado = useRef(false)
 
   useEffect(() => {
     const guardada = leerMenuVenta()
@@ -157,8 +175,99 @@ export function Venta() {
     subirAlInicio()
   }
 
+  function listaClientesLocal(): ClienteVenta[] {
+    return listaClientes.datos ?? []
+  }
+
+  function publicarClientes(siguiente: ClienteVenta[]) {
+    reemplazarCache(CLAVE_CLIENTES, siguiente)
+    setRecargaClientes((valor) => valor + 1)
+  }
+
+  function anotarCliente(actualizado: Cliente) {
+    publicarClientes(
+      listaClientesLocal().map((item) => (item.id === actualizado.id ? { ...item, ...actualizado } : item)),
+    )
+    setCliente((actual) => (actual?.id === actualizado.id ? actualizado : actual))
+  }
+
+  async function elegirEstado(opcion: Cliente, estado: EstadoCliente) {
+    setMenuId(null)
+    if (!enLinea) {
+      mostrar(MENSAJE_FALLO_RED, 'error')
+      return
+    }
+    if (accionEstado.current || opcion.estado === estado) return
+    accionEstado.current = true
+    setCambiandoId(opcion.id)
+    const resultado = await cambiarEstadoCliente(opcion.id, estado)
+    accionEstado.current = false
+    setCambiandoId(null)
+    if (!resultado.ok) {
+      mostrar(resultado.mensaje, 'error')
+      return
+    }
+    anotarCliente(resultado.datos)
+    setBloqueo(null)
+    mostrar(
+      resultado.datos.estado === 'activo'
+        ? `${resultado.datos.codigo} ahora está activo.`
+        : `${resultado.datos.codigo} ahora está inactivo.`,
+      'ok',
+    )
+  }
+
+  async function prepararBloqueo(opcion: Cliente) {
+    if (!enLinea) {
+      mostrar(MENSAJE_FALLO_RED, 'error')
+      return
+    }
+    if (accionEstado.current) return
+    accionEstado.current = true
+    setMenuId(null)
+    setAviso(null)
+    setBloqueo(null)
+    setConfirmacion({ cliente: opcion, prendas: null })
+    const resultado = await listarCanastaCliente(opcion.id)
+    accionEstado.current = false
+    if (!resultado.ok) {
+      setConfirmacion(null)
+      mostrar(resultado.mensaje, 'error')
+      return
+    }
+    setConfirmacion((actual) =>
+      actual?.cliente.id === opcion.id ? { cliente: opcion, prendas: resultado.datos } : actual,
+    )
+  }
+
+  async function confirmarBloqueo() {
+    if (accionEstado.current || !confirmacion || confirmacion.prendas == null) return
+    if (!enLinea) {
+      mostrar(MENSAJE_FALLO_RED, 'error')
+      return
+    }
+    accionEstado.current = true
+    setOcupadoEstado(true)
+    const resultado = await eliminarCliente(confirmacion.cliente.id)
+    accionEstado.current = false
+    setOcupadoEstado(false)
+    if (!resultado.ok) {
+      mostrar(resultado.mensaje, 'error')
+      return
+    }
+    const id = confirmacion.cliente.id
+    publicarClientes(listaClientesLocal().filter((item) => item.id !== id))
+    if (cliente?.id === id) {
+      setCliente(null)
+      setPaso('buscar')
+    }
+    setConfirmacion(null)
+    mostrar('Cliente bloqueado.', 'ok')
+  }
+
   function elegirCliente(opcion: Cliente) {
     if (eligiendo.current) return
+    setMenuId(null)
     if (!puedeVender(opcion.estado)) {
       setBloqueo(MENSAJE_CLIENTE_INACTIVO)
       subirAlInicio()
@@ -323,9 +432,14 @@ export function Venta() {
   const totalCanastaCliente = canasta ? totalCanasta([...canasta, ...lineas]) : null
 
   return (
-    <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
+    <Layout
+      titulo={nombre}
+      subtitulo={subtitulo}
+      acento={acento}
+      onAtras={confirmacion ? () => setConfirmacion(null) : undefined}
+    >
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
-      {paso === 'buscar' && !restaurando && bloqueo ? <Aviso>{bloqueo}</Aviso> : null}
+      {paso === 'buscar' && !restaurando && !confirmacion && bloqueo ? <Aviso>{bloqueo}</Aviso> : null}
       {restaurando ? <IndicadorCarga>Cargando el pedido…</IndicadorCarga> : null}
 
       {restaurando ? null : (
@@ -335,10 +449,11 @@ export function Venta() {
           initial={reducirMovimiento ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reducirMovimiento ? { opacity: 0 } : { opacity: 0, y: -8 }}
-          transition={reducirMovimiento ? { duration: 0 } : { duration: 0.2 }}
+          transition={reducirMovimiento ? { duration: 0 } : { duration: 0.14 }}
           onAnimationComplete={() => refPaso.current?.focus()}
           className="flex flex-col gap-5"
         >
+          {confirmacion ? null : (
           <div>
             <p className="text-sm text-black/60">Paso {numeros[paso]} de 4</p>
             <h2
@@ -350,8 +465,23 @@ export function Venta() {
               {titulos[paso]}
             </h2>
           </div>
+          )}
 
-          {paso === 'buscar' ? (
+          {confirmacion ? (
+            <DetalleCliente
+              cliente={confirmacion.cliente}
+              acento={acento}
+              ocupado={ocupadoEstado}
+              confirmacion={{ prendas: confirmacion.prendas, motivo: 'bloquear' }}
+              onEditar={() => {}}
+              onCambiarEstado={() => {}}
+              onPedirEliminar={() => {}}
+              onConfirmarEliminar={() => void confirmarBloqueo()}
+              onCancelarEliminar={() => setConfirmacion(null)}
+            />
+          ) : null}
+
+          {paso === 'buscar' && !confirmacion ? (
             <PasoBuscar
               busqueda={busqueda}
               consulta={consulta}
@@ -361,6 +491,12 @@ export function Venta() {
               revisandoId={null}
               esPc={esPc}
               acento={acento}
+              enLinea={enLinea}
+              menuId={menuId}
+              cambiandoId={cambiandoId}
+              onMenu={(id) => setMenuId(menuId === id ? null : id)}
+              onElegirEstado={(opcion, estado) => void elegirEstado(opcion, estado)}
+              onBloquear={(opcion) => void prepararBloqueo(opcion)}
               onBusqueda={(valor) => {
                 setBusqueda(valor)
                 setBloqueo(null)
@@ -446,6 +582,12 @@ function PasoBuscar({
   revisandoId,
   esPc,
   acento,
+  enLinea,
+  menuId,
+  cambiandoId,
+  onMenu,
+  onElegirEstado,
+  onBloquear,
   onBusqueda,
   onBuscarYa,
   onElegir,
@@ -459,6 +601,12 @@ function PasoBuscar({
   revisandoId: string | null
   esPc: boolean
   acento: string
+  enLinea: boolean
+  menuId: string | null
+  cambiandoId: string | null
+  onMenu: (id: string) => void
+  onElegirEstado: (cliente: Cliente, estado: EstadoCliente) => void
+  onBloquear: (cliente: Cliente) => void
   onBusqueda: (valor: string) => void
   onBuscarYa: () => void
   onElegir: (cliente: Cliente) => void
@@ -513,6 +661,12 @@ function PasoBuscar({
           clientes={clientes}
           acento={acento}
           revisandoId={revisandoId}
+          enLinea={enLinea}
+          menuId={menuId}
+          cambiandoId={cambiandoId}
+          onMenu={onMenu}
+          onElegirEstado={onElegirEstado}
+          onBloquear={onBloquear}
           onElegir={onElegir}
         />
       ) : null}
@@ -521,17 +675,18 @@ function PasoBuscar({
         <ul className="flex flex-col gap-2">
           {clientes.map((cliente) => {
             const prendas = textoPrendas(cliente.prendas)
+            const panelId = `estado-venta-${cliente.id}`
             return (
-              <li key={cliente.id}>
-                <motion.button
-                  type="button"
-                  onClick={() => onElegir(cliente)}
-                  disabled={revisandoId !== null}
-                  whileTap={reducirMovimiento || revisandoId !== null ? undefined : toque}
-                  transition={{ duration: 0.15 }}
-                  className="flex w-full touch-manipulation items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 text-left shadow-sm [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-                >
-                  <span className="min-w-0 flex-1">
+              <li key={cliente.id} className="flex flex-col gap-2 rounded-3xl bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <motion.button
+                    type="button"
+                    onClick={() => onElegir(cliente)}
+                    disabled={revisandoId !== null}
+                    whileTap={reducirMovimiento || revisandoId !== null ? undefined : toque}
+                    transition={{ duration: 0.15 }}
+                    className="min-w-0 flex-1 touch-manipulation text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+                  >
                     <span className="flex items-baseline gap-2">
                       <span className="shrink-0 font-display text-2xl uppercase leading-none tracking-wide">
                         {cliente.codigo}
@@ -540,9 +695,27 @@ function PasoBuscar({
                     </span>
                     {prendas ? <span className="mt-1 block text-sm text-black/60">{prendas}</span> : null}
                     {revisandoId === cliente.id ? <span className="mt-1 block text-sm">Revisando…</span> : null}
-                  </span>
-                  <EtiquetaEstado estado={cliente.estado} />
-                </motion.button>
+                  </motion.button>
+                  <BotonEtiquetaEstado
+                    codigo={cliente.codigo}
+                    estado={cliente.estado}
+                    abierto={menuId === cliente.id}
+                    guardando={cambiandoId === cliente.id}
+                    disabled={cambiandoId !== null}
+                    panelId={panelId}
+                    onClick={() => onMenu(cliente.id)}
+                  />
+                </div>
+                <PanelDesplegable abierto={menuId === cliente.id}>
+                  <OpcionesEstadoCliente
+                    id={panelId}
+                    codigo={cliente.codigo}
+                    estado={cliente.estado}
+                    enLinea={enLinea}
+                    onElegirEstado={(estado) => onElegirEstado(cliente, estado)}
+                    onBloquear={() => onBloquear(cliente)}
+                  />
+                </PanelDesplegable>
               </li>
             )
           })}
@@ -556,11 +729,23 @@ function TablaClientesVenta({
   clientes,
   acento,
   revisandoId,
+  enLinea,
+  menuId,
+  cambiandoId,
+  onMenu,
+  onElegirEstado,
+  onBloquear,
   onElegir,
 }: {
   clientes: ClienteVenta[]
   acento: string
   revisandoId: string | null
+  enLinea: boolean
+  menuId: string | null
+  cambiandoId: string | null
+  onMenu: (id: string) => void
+  onElegirEstado: (cliente: Cliente, estado: EstadoCliente) => void
+  onBloquear: (cliente: Cliente) => void
   onElegir: (cliente: Cliente) => void
 }) {
   return (
@@ -586,36 +771,114 @@ function TablaClientesVenta({
           </thead>
           <tbody>
             {clientes.map((cliente) => (
-              <tr
+              <FilaClienteVenta
                 key={cliente.id}
-                className="cursor-pointer border-b border-black/10 hover:bg-black/[0.03]"
-                onClick={() => {
-                  if (revisandoId !== null) return
-                  onElegir(cliente)
-                }}
-              >
-                <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    disabled={revisandoId !== null}
-                    onClick={() => onElegir(cliente)}
-                    className="break-words text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
-                  >
-                    {cliente.codigo}
-                  </button>
-                </td>
-                <td className="px-4 py-3">{cliente.nombre ?? 'Sin nombre'}</td>
-                <td className="px-4 py-3 text-black/70">{textoPrendas(cliente.prendas) ?? '—'}</td>
-                <td className="px-4 py-3">
-                  <EtiquetaEstado estado={cliente.estado} />
-                  {revisandoId === cliente.id ? <span className="mt-1 block text-sm">Revisando…</span> : null}
-                </td>
-              </tr>
+                cliente={cliente}
+                revisando={revisandoId === cliente.id}
+                ocupado={revisandoId !== null}
+                enLinea={enLinea}
+                menuAbierto={menuId === cliente.id}
+                guardando={cambiandoId === cliente.id}
+                menuBloqueado={cambiandoId !== null}
+                onMenu={() => onMenu(cliente.id)}
+                onElegirEstado={(estado) => onElegirEstado(cliente, estado)}
+                onBloquear={() => onBloquear(cliente)}
+                onElegir={() => onElegir(cliente)}
+              />
             ))}
           </tbody>
         </table>
       </div>
     </div>
+  )
+}
+
+function FilaClienteVenta({
+  cliente,
+  revisando,
+  ocupado,
+  enLinea,
+  menuAbierto,
+  guardando,
+  menuBloqueado,
+  onMenu,
+  onElegirEstado,
+  onBloquear,
+  onElegir,
+}: {
+  cliente: ClienteVenta
+  revisando: boolean
+  ocupado: boolean
+  enLinea: boolean
+  menuAbierto: boolean
+  guardando: boolean
+  menuBloqueado: boolean
+  onMenu: () => void
+  onElegirEstado: (estado: EstadoCliente) => void
+  onBloquear: () => void
+  onElegir: () => void
+}) {
+  const menuPanelId = `estado-venta-${cliente.id}`
+  const refEstado = useRef<HTMLButtonElement>(null)
+
+  function abrirSiEsDato(evento: MouseEvent<HTMLTableRowElement>) {
+    if (ocupado) return
+    const destino = evento.target
+    if (!(destino instanceof Element)) return
+    if (destino.closest('button')) return
+    onElegir()
+  }
+
+  return (
+    <>
+      <tr
+        className={`cursor-pointer border-b border-black/10 ${menuAbierto ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
+        onClick={abrirSiEsDato}
+      >
+        <td className="px-4 py-3">
+          <button
+            type="button"
+            disabled={ocupado}
+            onClick={onElegir}
+            className="break-words text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+          >
+            {cliente.codigo}
+          </button>
+        </td>
+        <td className="px-4 py-3">{cliente.nombre ?? 'Sin nombre'}</td>
+        <td className="px-4 py-3 text-black/70">
+          {textoPrendas(cliente.prendas) ?? '—'}
+          {revisando ? <span className="mt-1 block text-sm">Revisando…</span> : null}
+        </td>
+        <td className="px-4 py-3">
+          <BotonEtiquetaEstado
+            botonRef={refEstado}
+            codigo={cliente.codigo}
+            estado={cliente.estado}
+            abierto={menuAbierto}
+            guardando={guardando}
+            disabled={menuBloqueado}
+            panelId={menuPanelId}
+            onClick={onMenu}
+          />
+        </td>
+      </tr>
+      <MenuEstadoFlotante
+        abierto={menuAbierto}
+        panelId={menuPanelId}
+        anclaRef={refEstado}
+        onCerrar={onMenu}
+      >
+        <OpcionesEstadoCliente
+          codigo={cliente.codigo}
+          estado={cliente.estado}
+          enLinea={enLinea}
+          compacto
+          onElegirEstado={onElegirEstado}
+          onBloquear={onBloquear}
+        />
+      </MenuEstadoFlotante>
+    </>
   )
 }
 
@@ -689,7 +952,7 @@ function PasoPrendas({
 
   return (
     <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start lg:gap-8">
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4 lg:gap-3">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <FichaCliente cliente={cliente} />
@@ -729,7 +992,7 @@ function PasoPrendas({
       ) : null}
 
       {precios.length > 0 ? (
-        <div role="group" aria-label="Valores de prenda" className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
+        <div role="group" aria-label="Valores de prenda" className="grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-2.5">
           {precios.map((precio) => {
             const elegido = precio.valor === precioElegido
             const monto = formatearDolares(precio.valor)
@@ -741,7 +1004,7 @@ function PasoPrendas({
                 onClick={() => onElegirPrecio(precio.valor)}
                 whileTap={reducirMovimiento ? undefined : toque}
                 transition={{ duration: 0.15 }}
-                className="flex min-h-14 touch-manipulation items-center justify-center rounded-full px-3 font-display text-2xl leading-none tracking-wide [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black lg:min-h-24 lg:text-4xl"
+                className="flex min-h-12 touch-manipulation items-center justify-center rounded-full px-3 font-display text-xl leading-none tracking-wide [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black lg:min-h-16 lg:text-2xl"
                 style={{ backgroundColor: elegido ? '#000' : acento, color: elegido ? '#fff' : '#000' }}
               >
                 {monto}
@@ -754,7 +1017,7 @@ function PasoPrendas({
       {precioElegido != null ? (
         <form
           ref={refFormulario}
-          className="flex scroll-mt-4 flex-col gap-3 rounded-3xl bg-white p-5 shadow-sm"
+          className="mb-2 flex scroll-mt-4 flex-col gap-2.5 rounded-3xl bg-white p-4 shadow-sm lg:mb-3"
           noValidate
           onSubmit={onAgregar}
         >
@@ -1062,7 +1325,7 @@ function NumeroAnimado({
           initial="inicial"
           animate="visible"
           exit="sale"
-          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           className="col-start-1 row-start-1"
         >
           {texto}

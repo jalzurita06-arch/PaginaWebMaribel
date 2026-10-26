@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { guardarCache, leerCache, olvidarDatosGuardados, pedirDatos, reemplazarCache } from './cacheLectura.ts'
+import {
+  borrarCache,
+  guardarCache,
+  leerCache,
+  olvidarDatosGuardados,
+  pedirDatos,
+  reemplazarCache,
+} from './cacheLectura.ts'
 
 afterEach(() => {
   olvidarDatosGuardados()
@@ -9,6 +16,12 @@ describe('cache de lecturas', () => {
   it('recupera en memoria lo que acaba de guardar', () => {
     guardarCache('clientes', [{ id: '1' }])
     expect(leerCache<Array<{ id: string }>>('clientes')).toEqual([{ id: '1' }])
+  })
+
+  it('borra un dato para que la siguiente lectura no lo encuentre', () => {
+    guardarCache('abonos', [{ id: 'viejo' }])
+    borrarCache('abonos')
+    expect(leerCache('abonos')).toBeNull()
   })
 
   it('sobrevive si el almacenamiento del navegador falla', () => {
