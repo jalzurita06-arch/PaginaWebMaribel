@@ -136,10 +136,10 @@ export function Canasta() {
   const [pedidoEdicion, setPedidoEdicion] = useState<PedidoAEditar | null>(null)
   const [pedidoBorrar, setPedidoBorrar] = useState<PedidoAEditar | null>(null)
   const [borrandoPedido, setBorrandoPedido] = useState(false)
-  const [menuVenta, setMenuVenta] = useState(false)
+  const [menuVentaId, setMenuVentaId] = useState<string | null>(null)
 
   function cerrarMenuVenta() {
-    setMenuVenta(false)
+    setMenuVentaId(null)
     setRecarga((valor) => valor + 1)
   }
 
@@ -371,15 +371,10 @@ export function Canasta() {
 
       {vista === 'abiertas' ? (
         <>
-          {cargando ? (
-            <BotonVenta reducirMovimiento={reducirMovimiento} onClick={() => setMenuVenta(true)} />
-          ) : null}
-
           {cargando ? <IndicadorCarga>Cargando canastas…</IndicadorCarga> : null}
 
           {!cargando && errorCanastas ? (
             <div className="flex flex-col gap-3">
-              <BotonVenta reducirMovimiento={reducirMovimiento} onClick={() => setMenuVenta(true)} />
               <button type="button" onClick={() => setRecarga((valor) => valor + 1)} className={`${boton} bg-black text-white`}>
                 Reintentar
               </button>
@@ -402,7 +397,6 @@ export function Canasta() {
               saldo={resumenAbiertas.saldo}
               prendas={resumenAbiertas.prendas}
               reducirMovimiento={reducirMovimiento}
-              onVenta={() => setMenuVenta(true)}
               onHistorial={() => irA('historial')}
             />
           ) : null}
@@ -448,6 +442,7 @@ export function Canasta() {
               onConfirmar={(canasta, tipo) => void confirmarEnvio(canasta, tipo)}
               onEditarPedido={abrirEdicionPedido}
               onBorrarPedido={abrirBorradoPedido}
+              onVenta={(id) => setMenuVentaId(id)}
             />
           ) : null}
 
@@ -482,6 +477,7 @@ export function Canasta() {
                   onConfirmar={(tipo) => void confirmarEnvio(canasta, tipo)}
                   onEditarPedido={(dia) => abrirEdicionPedido(canasta, dia)}
                   onBorrarPedido={(dia) => abrirBorradoPedido(canasta, dia)}
+                  onVenta={() => setMenuVentaId(canasta.clienteId)}
                 />
               ))}
             </ul>
@@ -524,28 +520,33 @@ export function Canasta() {
         onConfirmar={() => void confirmarBorradoPedido()}
       />
 
-      <MenuInferior abierto={menuVenta} etiqueta="Venta" onCerrar={cerrarMenuVenta}>
-        {menuVenta ? <Venta embebida onCerrar={cerrarMenuVenta} /> : null}
+      <MenuInferior abierto={menuVentaId != null} etiqueta="Venta" onCerrar={cerrarMenuVenta}>
+        {menuVentaId ? (
+          <Venta embebida clienteInicialId={menuVentaId} onCerrar={cerrarMenuVenta} />
+        ) : null}
       </MenuInferior>
     </Layout>
   )
 }
 
 function BotonVenta({
-  reducirMovimiento,
+  compacto = false,
+  disabled = false,
   onClick,
 }: {
-  reducirMovimiento: boolean | null
+  compacto?: boolean
+  disabled?: boolean
   onClick: () => void
 }) {
+  const reducirMovimiento = useReducedMotion()
   return (
     <motion.button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      whileTap={reducirMovimiento ? undefined : toque}
+      whileTap={reducirMovimiento || disabled ? undefined : toque}
       transition={{ duration: 0.15 }}
-      className={`${boton} lg:w-auto lg:shrink-0 lg:px-6`}
-      style={{ backgroundColor: secciones.venta.acento }}
+      className={`${compacto ? botonCompacto : boton} bg-afirmar`}
     >
       Venta
     </motion.button>
@@ -558,7 +559,6 @@ function ResumenAbiertas({
   saldo,
   prendas,
   reducirMovimiento,
-  onVenta,
   onHistorial,
 }: {
   acento: string
@@ -566,7 +566,6 @@ function ResumenAbiertas({
   saldo: number
   prendas: number
   reducirMovimiento: boolean | null
-  onVenta: () => void
   onHistorial: () => void
 }) {
   return (
@@ -585,18 +584,15 @@ function ResumenAbiertas({
           <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl">{prendas}</dd>
         </div>
       </dl>
-      <div className="flex flex-col gap-3 lg:flex-row lg:w-auto lg:shrink-0">
-        <BotonVenta reducirMovimiento={reducirMovimiento} onClick={onVenta} />
-        <motion.button
-          type="button"
-          onClick={onHistorial}
-          whileTap={reducirMovimiento ? undefined : toque}
-          transition={{ duration: 0.15 }}
-          className={`${boton} bg-black text-white lg:w-auto lg:shrink-0 lg:px-6`}
-        >
-          Historial de la semana
-        </motion.button>
-      </div>
+      <motion.button
+        type="button"
+        onClick={onHistorial}
+        whileTap={reducirMovimiento ? undefined : toque}
+        transition={{ duration: 0.15 }}
+        className={`${boton} bg-black text-white lg:w-auto lg:shrink-0 lg:px-6`}
+      >
+        Historial de la semana
+      </motion.button>
     </section>
   )
 }
@@ -623,6 +619,7 @@ function FilaCanasta({
   onConfirmar,
   onEditarPedido,
   onBorrarPedido,
+  onVenta,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -640,6 +637,7 @@ function FilaCanasta({
   onConfirmar: (tipo: TipoEnvio) => void
   onEditarPedido?: (dia: GrupoDia) => void
   onBorrarPedido?: (dia: GrupoDia) => void
+  onVenta: () => void
 }) {
   const detalleId = useId()
 
@@ -648,25 +646,32 @@ function FilaCanasta({
       id={`canasta-${canasta.clienteId}`}
       className={`flex scroll-mt-4 flex-col rounded-3xl p-5 shadow-sm ${sinAbono ? 'bg-peligro' : 'bg-white'}`}
     >
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          aria-expanded={abierta}
+          aria-controls={detalleId}
+          onClick={onAlternar}
+          className="min-w-0 flex-1 touch-manipulation text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+        >
+          <span className="flex items-center gap-1.5">
+            <span className="min-w-0 break-words font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
+              {canasta.codigo}
+            </span>
+            {sinAbono ? <CampanaAbono /> : null}
+          </span>
+          <NombreCliente nombre={canasta.nombre} className="mt-2 block text-sm" />
+        </button>
+        <BotonVenta compacto disabled={ocupado || enviando} onClick={onVenta} />
+      </div>
       <button
         type="button"
         aria-expanded={abierta}
         aria-controls={detalleId}
         onClick={onAlternar}
-        className="touch-manipulation text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+        className="mt-4 touch-manipulation text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
       >
-        <span className="flex items-start justify-between gap-3">
-          <span className="min-w-0">
-            <span className="flex items-center gap-1.5">
-              <span className="min-w-0 break-words font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">
-                {canasta.codigo}
-              </span>
-              {sinAbono ? <CampanaAbono /> : null}
-            </span>
-            <NombreCliente nombre={canasta.nombre} className="mt-2 block text-sm" />
-          </span>
-          <span className="shrink-0 pt-0.5 text-xl font-bold leading-none">{textoCantidad(canasta.prendas)}</span>
-        </span>
+        <span className="block text-xl font-bold leading-none">{textoCantidad(canasta.prendas)}</span>
         <span className="mt-4 grid grid-cols-3 gap-2">
           <Monto etiqueta="Total" valor={canasta.total} />
           <Monto etiqueta="Abonado" valor={canasta.saldoFavor} />
@@ -722,6 +727,7 @@ function TablaCanastas({
   onConfirmar,
   onEditarPedido,
   onBorrarPedido,
+  onVenta,
 }: {
   canastas: CanastaAbierta[]
   acento: string
@@ -739,6 +745,7 @@ function TablaCanastas({
   onConfirmar: (canasta: CanastaAbierta, tipo: TipoEnvio) => void
   onEditarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
   onBorrarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
+  onVenta: (id: string) => void
 }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
@@ -797,6 +804,7 @@ function TablaCanastas({
                   onConfirmar={(tipo) => onConfirmar(canasta, tipo)}
                   onEditarPedido={(dia) => onEditarPedido?.(canasta, dia)}
                   onBorrarPedido={(dia) => onBorrarPedido?.(canasta, dia)}
+                  onVenta={() => onVenta(canasta.clienteId)}
                 />
               )
             })}
@@ -824,6 +832,7 @@ function FilasTabla({
   onConfirmar,
   onEditarPedido,
   onBorrarPedido,
+  onVenta,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -841,6 +850,7 @@ function FilasTabla({
   onConfirmar: (tipo: TipoEnvio) => void
   onEditarPedido?: (dia: GrupoDia) => void
   onBorrarPedido?: (dia: GrupoDia) => void
+  onVenta: () => void
 }) {
   const detalleId = useId()
 
@@ -859,19 +869,24 @@ function FilasTabla({
         onClick={alternarSiEsDato}
       >
         <td className="whitespace-nowrap px-4 py-2.5 pr-2">
-          <span className="inline-flex items-center gap-1.5">
-            <button
-              type="button"
-              aria-expanded={abierta}
-              aria-controls={detalleId}
-              onClick={onAlternar}
-              className="text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-            >
-              {canasta.codigo}
-            </button>
-            {sinAbono ? <CampanaAbono /> : null}
-          </span>
-          <NombreCliente nombre={canasta.nombre} className="mt-1 block text-sm" />
+          <div className="flex items-center justify-between gap-3">
+            <span className="min-w-0">
+              <span className="inline-flex items-center gap-1.5">
+                <button
+                  type="button"
+                  aria-expanded={abierta}
+                  aria-controls={detalleId}
+                  onClick={onAlternar}
+                  className="text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                >
+                  {canasta.codigo}
+                </button>
+                {sinAbono ? <CampanaAbono /> : null}
+              </span>
+              <NombreCliente nombre={canasta.nombre} className="mt-1 block text-sm" />
+            </span>
+            <BotonVenta compacto disabled={ocupado || enviando} onClick={onVenta} />
+          </div>
         </td>
         <td className="px-4 py-2.5 pl-2 text-right text-xl font-bold tabular-nums leading-none">
           {canasta.prendas}

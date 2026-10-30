@@ -103,9 +103,11 @@ function textoPrendas(prendas: number) {
 export function Venta({
   embebida = false,
   onCerrar,
+  clienteInicialId,
 }: {
   embebida?: boolean
   onCerrar?: () => void
+  clienteInicialId?: string
 } = {}) {
   const { nombre, subtitulo, acento } = secciones.venta
   const { enLinea } = useConexion()
@@ -144,7 +146,9 @@ export function Venta({
   const [errorCanasta, setErrorCanasta] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [guardandoAbono, setGuardandoAbono] = useState(false)
-  const [restaurando, setRestaurando] = useState(() => (embebida ? false : leerMenuVenta() != null))
+  const [restaurando, setRestaurando] = useState(
+    () => (embebida ? Boolean(clienteInicialId) : leerMenuVenta() != null),
+  )
   const [menuId, setMenuId] = useState<string | null>(null)
   const [cambiandoId, setCambiandoId] = useState<string | null>(null)
   const [ocupadoEstado, setOcupadoEstado] = useState(false)
@@ -152,6 +156,30 @@ export function Venta({
   const accionEstado = useRef(false)
 
   useEffect(() => {
+    if (embebida && clienteInicialId) {
+      let vigente = true
+      void (async () => {
+        const resultado = await obtenerCliente(clienteInicialId)
+        if (!vigente) return
+        if (!resultado.ok) {
+          setRestaurando(false)
+          setAviso({ texto: resultado.mensaje, tono: 'error' })
+          return
+        }
+        if (!puedeVender(resultado.datos.estado)) {
+          setCliente(resultado.datos)
+          setBloqueo(MENSAJE_CLIENTE_INACTIVO)
+          setRestaurando(false)
+          return
+        }
+        setCliente(resultado.datos)
+        setPaso('prendas')
+        setRestaurando(false)
+      })()
+      return () => {
+        vigente = false
+      }
+    }
     if (embebida) return
     const guardada = leerMenuVenta()
     if (!guardada) {
@@ -175,7 +203,7 @@ export function Venta({
     return () => {
       vigente = false
     }
-  }, [embebida])
+  }, [embebida, clienteInicialId])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
     setAviso({ texto, tono })
