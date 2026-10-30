@@ -178,7 +178,7 @@ export function MenuEstadoFlotante({
       initial={salto ? false : { opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={salto ? { duration: 0 } : transicionDesplegar}
-      className="fixed z-30 flex w-40 flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
+      className="fixed z-[60] flex w-40 flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
       style={{ top: 0, left: 0, visibility: 'hidden' }}
     >
       {children}

@@ -100,7 +100,13 @@ function textoPrendas(prendas: number) {
   return prendas === 1 ? '1 prenda pedida' : `${prendas} prendas pedidas`
 }
 
-export function Venta() {
+export function Venta({
+  embebida = false,
+  onCerrar,
+}: {
+  embebida?: boolean
+  onCerrar?: () => void
+} = {}) {
   const { nombre, subtitulo, acento } = secciones.venta
   const { enLinea } = useConexion()
   const esPc = usePantallaPc()
@@ -138,7 +144,7 @@ export function Venta() {
   const [errorCanasta, setErrorCanasta] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [guardandoAbono, setGuardandoAbono] = useState(false)
-  const [restaurando, setRestaurando] = useState(() => leerMenuVenta() != null)
+  const [restaurando, setRestaurando] = useState(() => (embebida ? false : leerMenuVenta() != null))
   const [menuId, setMenuId] = useState<string | null>(null)
   const [cambiandoId, setCambiandoId] = useState<string | null>(null)
   const [ocupadoEstado, setOcupadoEstado] = useState(false)
@@ -146,6 +152,7 @@ export function Venta() {
   const accionEstado = useRef(false)
 
   useEffect(() => {
+    if (embebida) return
     const guardada = leerMenuVenta()
     if (!guardada) {
       setRestaurando(false)
@@ -168,11 +175,11 @@ export function Venta() {
     return () => {
       vigente = false
     }
-  }, [])
+  }, [embebida])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
     setAviso({ texto, tono })
-    subirAlInicio()
+    if (!embebida) subirAlInicio()
   }
 
   function listaClientesLocal(): ClienteVenta[] {
@@ -270,7 +277,7 @@ export function Venta() {
     setMenuId(null)
     if (!puedeVender(opcion.estado)) {
       setBloqueo(MENSAJE_CLIENTE_INACTIVO)
-      subirAlInicio()
+      if (!embebida) subirAlInicio()
       return
     }
 
@@ -292,7 +299,7 @@ export function Venta() {
       if (!puedeVender(resultado.datos.estado)) {
         setPaso('buscar')
         setBloqueo(MENSAJE_CLIENTE_INACTIVO)
-        subirAlInicio()
+        if (!embebida) subirAlInicio()
       }
     })
   }
@@ -431,13 +438,8 @@ export function Venta() {
   const totalVenta = totalCanasta(lineas)
   const totalCanastaCliente = canasta ? totalCanasta([...canasta, ...lineas]) : null
 
-  return (
-    <Layout
-      titulo={nombre}
-      subtitulo={subtitulo}
-      acento={acento}
-      onAtras={confirmacion ? () => setConfirmacion(null) : undefined}
-    >
+  const flujo = (
+    <>
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
       {paso === 'buscar' && !restaurando && !confirmacion && bloqueo ? <Aviso>{bloqueo}</Aviso> : null}
       {restaurando ? <IndicadorCarga>Cargando el pedido…</IndicadorCarga> : null}
@@ -564,11 +566,40 @@ export function Venta() {
               cliente={cliente}
               venta={ventaConfirmada}
               onOtraVenta={registrarOtraVenta}
+              onSalir={onCerrar}
             />
           ) : null}
         </motion.div>
       </AnimatePresence>
       )}
+    </>
+  )
+
+  if (embebida) {
+    return (
+      <div className="flex flex-col gap-5 pb-2">
+        {confirmacion ? (
+          <button
+            type="button"
+            onClick={() => setConfirmacion(null)}
+            className={`${boton} bg-black/5`}
+          >
+            Volver
+          </button>
+        ) : null}
+        {flujo}
+      </div>
+    )
+  }
+
+  return (
+    <Layout
+      titulo={nombre}
+      subtitulo={subtitulo}
+      acento={acento}
+      onAtras={confirmacion ? () => setConfirmacion(null) : undefined}
+    >
+      {flujo}
     </Layout>
   )
 }
@@ -1217,10 +1248,12 @@ function PasoConfirmado({
   cliente,
   venta,
   onOtraVenta,
+  onSalir,
 }: {
   cliente: Cliente
   venta: ItemCanasta[]
   onOtraVenta: () => void
+  onSalir?: () => void
 }) {
   const reducirMovimiento = useReducedMotion()
   const rutaVenta = `/compartir/${cliente.id}?venta=${encodeURIComponent(codificarVenta(venta))}`
@@ -1259,15 +1292,30 @@ function PasoConfirmado({
       >
         Registrar otra venta
       </motion.button>
-      <Enlace
-        to="/"
-        onClick={() => borrarMenuVenta()}
-        whileTap={reducirMovimiento ? undefined : toque}
-        transition={{ duration: 0.15 }}
-        className={`${boton} bg-black/5`}
-      >
-        Salir
-      </Enlace>
+      {onSalir ? (
+        <motion.button
+          type="button"
+          onClick={() => {
+            borrarMenuVenta()
+            onSalir()
+          }}
+          whileTap={reducirMovimiento ? undefined : toque}
+          transition={{ duration: 0.15 }}
+          className={`${boton} bg-black/5`}
+        >
+          Salir
+        </motion.button>
+      ) : (
+        <Enlace
+          to="/"
+          onClick={() => borrarMenuVenta()}
+          whileTap={reducirMovimiento ? undefined : toque}
+          transition={{ duration: 0.15 }}
+          className={`${boton} bg-black/5`}
+        >
+          Salir
+        </Enlace>
+      )}
     </div>
   )
 }

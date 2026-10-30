@@ -7,8 +7,10 @@ import { Aviso } from '../components/Aviso.tsx'
 import { CampanaAbono } from '../components/CampanaAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
+import { MenuInferior } from '../components/MenuInferior.tsx'
 import { PanelEditarPedido, textoFechaPedido, type PedidoAEditar } from '../components/PanelEditarPedido.tsx'
 import { FilaTablaDesplegable, PanelDesplegable, transicionDesplegar } from '../components/PanelDesplegable.tsx'
+import { Venta } from './Venta.tsx'
 import { secciones } from '../config/secciones.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { abonoAtrasado, ultimasFechasAbono } from '../lib/abonoAtrasado.ts'
@@ -134,6 +136,12 @@ export function Canasta() {
   const [pedidoEdicion, setPedidoEdicion] = useState<PedidoAEditar | null>(null)
   const [pedidoBorrar, setPedidoBorrar] = useState<PedidoAEditar | null>(null)
   const [borrandoPedido, setBorrandoPedido] = useState(false)
+  const [menuVenta, setMenuVenta] = useState(false)
+
+  function cerrarMenuVenta() {
+    setMenuVenta(false)
+    setRecarga((valor) => valor + 1)
+  }
 
   function pedidoDesdeDia(canasta: CanastaAbierta, dia: GrupoDia): PedidoAEditar {
     return {
@@ -363,10 +371,15 @@ export function Canasta() {
 
       {vista === 'abiertas' ? (
         <>
+          {cargando ? (
+            <BotonVenta reducirMovimiento={reducirMovimiento} onClick={() => setMenuVenta(true)} />
+          ) : null}
+
           {cargando ? <IndicadorCarga>Cargando canastas…</IndicadorCarga> : null}
 
           {!cargando && errorCanastas ? (
             <div className="flex flex-col gap-3">
+              <BotonVenta reducirMovimiento={reducirMovimiento} onClick={() => setMenuVenta(true)} />
               <button type="button" onClick={() => setRecarga((valor) => valor + 1)} className={`${boton} bg-black text-white`}>
                 Reintentar
               </button>
@@ -389,6 +402,7 @@ export function Canasta() {
               saldo={resumenAbiertas.saldo}
               prendas={resumenAbiertas.prendas}
               reducirMovimiento={reducirMovimiento}
+              onVenta={() => setMenuVenta(true)}
               onHistorial={() => irA('historial')}
             />
           ) : null}
@@ -509,7 +523,32 @@ export function Canasta() {
         }}
         onConfirmar={() => void confirmarBorradoPedido()}
       />
+
+      <MenuInferior abierto={menuVenta} etiqueta="Venta" onCerrar={cerrarMenuVenta}>
+        {menuVenta ? <Venta embebida onCerrar={cerrarMenuVenta} /> : null}
+      </MenuInferior>
     </Layout>
+  )
+}
+
+function BotonVenta({
+  reducirMovimiento,
+  onClick,
+}: {
+  reducirMovimiento: boolean | null
+  onClick: () => void
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileTap={reducirMovimiento ? undefined : toque}
+      transition={{ duration: 0.15 }}
+      className={`${boton} lg:w-auto lg:shrink-0 lg:px-6`}
+      style={{ backgroundColor: secciones.venta.acento }}
+    >
+      Venta
+    </motion.button>
   )
 }
 
@@ -519,6 +558,7 @@ function ResumenAbiertas({
   saldo,
   prendas,
   reducirMovimiento,
+  onVenta,
   onHistorial,
 }: {
   acento: string
@@ -526,6 +566,7 @@ function ResumenAbiertas({
   saldo: number
   prendas: number
   reducirMovimiento: boolean | null
+  onVenta: () => void
   onHistorial: () => void
 }) {
   return (
@@ -544,15 +585,18 @@ function ResumenAbiertas({
           <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl">{prendas}</dd>
         </div>
       </dl>
-      <motion.button
-        type="button"
-        onClick={onHistorial}
-        whileTap={reducirMovimiento ? undefined : toque}
-        transition={{ duration: 0.15 }}
-        className={`${boton} bg-black text-white lg:w-auto lg:shrink-0 lg:px-6`}
-      >
-        Historial de la semana
-      </motion.button>
+      <div className="flex flex-col gap-3 lg:flex-row lg:w-auto lg:shrink-0">
+        <BotonVenta reducirMovimiento={reducirMovimiento} onClick={onVenta} />
+        <motion.button
+          type="button"
+          onClick={onHistorial}
+          whileTap={reducirMovimiento ? undefined : toque}
+          transition={{ duration: 0.15 }}
+          className={`${boton} bg-black text-white lg:w-auto lg:shrink-0 lg:px-6`}
+        >
+          Historial de la semana
+        </motion.button>
+      </div>
     </section>
   )
 }
