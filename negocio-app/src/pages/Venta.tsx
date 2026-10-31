@@ -540,6 +540,7 @@ export function Venta({
           {paso === 'prendas' && cliente ? (
             <PasoPrendas
               cliente={cliente}
+              embebida={embebida}
               acento={acento}
               precios={precios}
               cargandoPrecios={cargandoPrecios}
@@ -943,6 +944,7 @@ function FilaClienteVenta({
 
 function PasoPrendas({
   cliente,
+  embebida = false,
   acento,
   precios,
   cargandoPrecios,
@@ -963,6 +965,7 @@ function PasoPrendas({
   onGuardar,
 }: {
   cliente: Cliente
+  embebida?: boolean
   acento: string
   precios: Precio[]
   cargandoPrecios: boolean
@@ -1010,10 +1013,10 @@ function PasoPrendas({
   }
 
   return (
-    <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start lg:gap-8">
+    <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.9fr)] lg:items-start lg:gap-6">
       <div className="flex flex-col gap-4 lg:gap-3">
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-[12rem] flex-1">
           <FichaCliente cliente={cliente} />
         </div>
         <button
@@ -1107,7 +1110,7 @@ function PasoPrendas({
                 aria-invalid={errorCantidad ? true : undefined}
                 aria-describedby={errorCantidad ? idError : undefined}
                 onChange={(evento) => onCantidad(textoCantidadEntera(evento.target.value))}
-                className="min-w-0 flex-1 rounded-full bg-fondo px-5 py-4 text-center text-base outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                className="h-14 w-24 shrink-0 rounded-full bg-fondo px-2 text-center font-display text-2xl tabular-nums leading-none outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               />
               <button
                 type="button"
@@ -1142,7 +1145,7 @@ function PasoPrendas({
       ) : null}
       </div>
 
-      <div className="flex flex-col gap-5 lg:sticky lg:top-8">
+      <div className={`flex flex-col gap-5 lg:sticky ${embebida ? 'lg:top-2' : 'lg:top-8'}`}>
       <ListaTemporal
         lineas={lineas}
         totalVenta={totalVenta}
@@ -1352,22 +1355,20 @@ function FichaCliente({ cliente }: { cliente: Cliente }) {
   return (
     <p className="rounded-3xl bg-white px-5 py-4 shadow-sm">
       <span className="block font-display text-2xl uppercase leading-none tracking-wide lg:text-4xl">{cliente.codigo}</span>
-      {cliente.nombre ? <span className="mt-2 block break-words text-sm">{cliente.nombre}</span> : null}
+      {cliente.nombre ? <span className="mt-2 block text-sm">{cliente.nombre}</span> : null}
     </p>
   )
 }
 
 const variantesNumero = {
   inicial: (direccion: number) => ({
-    y: direccion > 0 ? 12 : -12,
+    y: direccion > 0 ? '100%' : '-100%',
     opacity: 0,
-    scale: 0.86,
   }),
-  visible: { y: 0, opacity: 1, scale: 1 },
+  visible: { y: '0%', opacity: 1 },
   sale: (direccion: number) => ({
-    y: direccion > 0 ? -12 : 12,
+    y: direccion > 0 ? '-100%' : '100%',
     opacity: 0,
-    scale: 0.86,
   }),
 }
 
@@ -1392,8 +1393,11 @@ function NumeroAnimado({
   if (reducirMovimiento) return <span className={className}>{texto}</span>
 
   return (
-    <span className={`inline-grid overflow-hidden align-bottom ${className}`}>
-      <AnimatePresence initial={false} mode="popLayout" custom={direccion}>
+    <span className={`relative inline-block overflow-hidden align-baseline ${className}`}>
+      <span className="invisible block" aria-hidden>
+        {texto}
+      </span>
+      <AnimatePresence initial={false} custom={direccion}>
         <motion.span
           key={texto}
           custom={direccion}
@@ -1402,7 +1406,7 @@ function NumeroAnimado({
           animate="visible"
           exit="sale"
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="col-start-1 row-start-1"
+          className="absolute inset-0"
         >
           {texto}
         </motion.span>

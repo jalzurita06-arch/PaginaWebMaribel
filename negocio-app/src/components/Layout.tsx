@@ -15,12 +15,13 @@ type LayoutProps = {
   subtitulo: string
   acento: string
   onAtras?: () => void
+  amplio?: boolean
   children?: ReactNode
 }
 
 const toque = { scale: 0.97 }
 
-export function Layout({ titulo, subtitulo, acento: _acento, onAtras, children }: LayoutProps) {
+export function Layout({ titulo, subtitulo, acento: _acento, onAtras, amplio = false, children }: LayoutProps) {
   const { pathname } = useLocation()
   const reducirMovimiento = useReducedMotion()
   const esInicio = pathname === '/'
@@ -40,7 +41,9 @@ export function Layout({ titulo, subtitulo, acento: _acento, onAtras, children }
 
   return (
     <main className="min-h-dvh bg-fondo px-4 py-4 text-black lg:px-10 lg:py-10">
-      <div className="mx-auto flex w-full max-w-lg flex-col gap-4 lg:max-w-6xl lg:gap-8">
+      <div
+        className={`mx-auto flex w-full max-w-lg flex-col gap-4 lg:gap-8 ${amplio ? 'lg:max-w-[88rem]' : 'lg:max-w-6xl'}`}
+      >
         <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 lg:gap-x-8 lg:gap-y-4">
           <div className="col-start-1 row-start-1">
             {pathname === '/login' ? (

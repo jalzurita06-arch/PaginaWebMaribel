@@ -63,7 +63,7 @@ const botonBase =
 
 const boton = `${botonBase} min-h-12 w-full px-4 py-3 text-base`
 
-const botonCompacto = `${botonBase} min-h-10 w-auto whitespace-nowrap px-4 py-2 text-sm`
+const botonCompacto = `${botonBase} min-h-10 w-auto whitespace-nowrap px-3.5 py-2 text-sm`
 
 const consultaPc = '(min-width: 980px)'
 
@@ -366,7 +366,7 @@ export function Canasta() {
   }
 
   return (
-    <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
+    <Layout titulo={nombre} subtitulo={subtitulo} acento={acento} amplio>
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
 
       {vista === 'abiertas' ? (
@@ -662,7 +662,6 @@ function FilaCanasta({
           </span>
           <NombreCliente nombre={canasta.nombre} className="mt-2 block text-sm" />
         </button>
-        <BotonVenta compacto disabled={ocupado || enviando} onClick={onVenta} />
       </div>
       <button
         type="button"
@@ -704,6 +703,7 @@ function FilaCanasta({
           onEnviado={onEnviado}
           onElegirTipo={onElegirTipo}
           onConfirmar={onConfirmar}
+          onVenta={onVenta}
         />
       </div>
     </li>
@@ -869,24 +869,19 @@ function FilasTabla({
         onClick={alternarSiEsDato}
       >
         <td className="whitespace-nowrap px-4 py-2.5 pr-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="min-w-0">
-              <span className="inline-flex items-center gap-1.5">
-                <button
-                  type="button"
-                  aria-expanded={abierta}
-                  aria-controls={detalleId}
-                  onClick={onAlternar}
-                  className="text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-                >
-                  {canasta.codigo}
-                </button>
-                {sinAbono ? <CampanaAbono /> : null}
-              </span>
-              <NombreCliente nombre={canasta.nombre} className="mt-1 block text-sm" />
-            </span>
-            <BotonVenta compacto disabled={ocupado || enviando} onClick={onVenta} />
-          </div>
+          <span className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-expanded={abierta}
+              aria-controls={detalleId}
+              onClick={onAlternar}
+              className="text-left font-display text-2xl uppercase leading-none tracking-wide focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              {canasta.codigo}
+            </button>
+            {sinAbono ? <CampanaAbono /> : null}
+          </span>
+          <NombreCliente nombre={canasta.nombre} className="mt-1 block text-sm" />
         </td>
         <td className="px-4 py-2.5 pl-2 text-right text-xl font-bold tabular-nums leading-none">
           {canasta.prendas}
@@ -907,6 +902,7 @@ function FilasTabla({
             onEnviado={onEnviado}
             onElegirTipo={onElegirTipo}
             onConfirmar={onConfirmar}
+            onVenta={onVenta}
           />
         </td>
       </tr>
@@ -1130,6 +1126,7 @@ function AccionesCanasta({
   onEnviado,
   onElegirTipo,
   onConfirmar,
+  onVenta,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -1142,60 +1139,85 @@ function AccionesCanasta({
   onEnviado: () => void
   onElegirTipo: (tipo: TipoEnvio) => void
   onConfirmar: (tipo: TipoEnvio) => void
+  onVenta: () => void
 }) {
   const reducirMovimiento = useReducedMotion()
   const bloqueado = ocupado && !enviando
   const clase = compacto ? botonCompacto : boton
   const bloqueada = ocupado || enviando
 
-  return (
-    <div className={compacto ? 'flex flex-nowrap items-center justify-end gap-2' : 'flex flex-col gap-4'}>
-      <div className={compacto ? 'flex flex-nowrap items-center gap-2' : 'grid grid-cols-2 gap-3'}>
-        <Enlace
-          to={`/compartir/${canasta.clienteId}`}
-          state={{ desde: 'canasta' }}
-          aria-disabled={bloqueada || undefined}
-          tabIndex={bloqueada ? -1 : undefined}
-          onClick={(evento) => {
-            if (bloqueada) evento.preventDefault()
-          }}
-          whileTap={reducirMovimiento || bloqueada ? undefined : toque}
-          transition={{ duration: 0.15 }}
-          className={`${clase} bg-black text-white ${bloqueada ? 'pointer-events-none opacity-50' : ''}`}
-        >
-          Enviar total
-        </Enlace>
-        <Enlace
-          to={rutaAbonoDesdeCanasta(canasta.clienteId)}
-          aria-disabled={bloqueada || undefined}
-          tabIndex={bloqueada ? -1 : undefined}
-          onClick={(evento) => {
-            if (bloqueada) evento.preventDefault()
-          }}
-          whileTap={reducirMovimiento || bloqueada ? undefined : toque}
-          transition={{ duration: 0.15 }}
-          className={`${clase} ${bloqueada ? 'pointer-events-none opacity-50' : ''}`}
-          style={{ backgroundColor: acento }}
-        >
-          Abono
-        </Enlace>
+  const enviar = (
+    <Enlace
+      to={`/compartir/${canasta.clienteId}`}
+      state={{ desde: 'canasta' }}
+      aria-disabled={bloqueada || undefined}
+      tabIndex={bloqueada ? -1 : undefined}
+      onClick={(evento) => {
+        if (bloqueada) evento.preventDefault()
+      }}
+      whileTap={reducirMovimiento || bloqueada ? undefined : toque}
+      transition={{ duration: 0.15 }}
+      className={`${clase} bg-black text-white ${bloqueada ? 'pointer-events-none opacity-50' : ''}`}
+    >
+      Enviar total
+    </Enlace>
+  )
+
+  const abono = (
+    <Enlace
+      to={rutaAbonoDesdeCanasta(canasta.clienteId)}
+      aria-disabled={bloqueada || undefined}
+      tabIndex={bloqueada ? -1 : undefined}
+      onClick={(evento) => {
+        if (bloqueada) evento.preventDefault()
+      }}
+      whileTap={reducirMovimiento || bloqueada ? undefined : toque}
+      transition={{ duration: 0.15 }}
+      className={`${clase} ${bloqueada ? 'pointer-events-none opacity-50' : ''}`}
+      style={{ backgroundColor: acento }}
+    >
+      Abono
+    </Enlace>
+  )
+
+  const bodega = (
+    <SelectorEnvio
+      codigo={canasta.codigo}
+      acento={acento}
+      compacto={compacto}
+      abierto={selector !== null}
+      paso={selector?.paso ?? 'menu'}
+      tipo={selector?.tipo ?? null}
+      ocupado={bloqueado}
+      enviando={enviando}
+      onAbrir={onAbrirSelector}
+      onBodega={onCerrarSelector}
+      onEnviado={onEnviado}
+      onElegirTipo={onElegirTipo}
+      onConfirmar={onConfirmar}
+      onCancelar={onCerrarSelector}
+    />
+  )
+
+  if (compacto) {
+    return (
+      <div className="flex flex-nowrap items-center justify-end gap-2">
+        {enviar}
+        <BotonVenta compacto disabled={bloqueada} onClick={onVenta} />
+        {abono}
+        {bodega}
       </div>
-      <SelectorEnvio
-        codigo={canasta.codigo}
-        acento={acento}
-        compacto={compacto}
-        abierto={selector !== null}
-        paso={selector?.paso ?? 'menu'}
-        tipo={selector?.tipo ?? null}
-        ocupado={bloqueado}
-        enviando={enviando}
-        onAbrir={onAbrirSelector}
-        onBodega={onCerrarSelector}
-        onEnviado={onEnviado}
-        onElegirTipo={onElegirTipo}
-        onConfirmar={onConfirmar}
-        onCancelar={onCerrarSelector}
-      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {enviar}
+      <div className="grid grid-cols-2 gap-3">
+        <BotonVenta disabled={bloqueada} onClick={onVenta} />
+        {abono}
+      </div>
+      {bodega}
     </div>
   )
 }
