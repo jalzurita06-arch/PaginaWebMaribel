@@ -1174,7 +1174,7 @@ function AccionesCanasta({
       whileTap={reducirMovimiento || bloqueada ? undefined : toque}
       transition={{ duration: 0.15 }}
       className={`${clase} ${bloqueada ? 'pointer-events-none opacity-50' : ''}`}
-      style={{ backgroundColor: acento }}
+      style={{ backgroundColor: secciones.abonos.acento }}
     >
       Abono
     </Enlace>
