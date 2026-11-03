@@ -5,6 +5,7 @@ import { Aviso } from '../components/Aviso.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { negocio } from '../config/negocio.ts'
+import { useBurbuja } from '../context/useBurbuja.ts'
 import { secciones } from '../config/secciones.ts'
 import {
   abrirWhatsAppDeCliente,
@@ -41,12 +42,22 @@ export function Compartir() {
   const [parametros] = useSearchParams()
   const textoVenta = parametros.get('venta')
   const { acento } = secciones.canasta
+  const avisar = useBurbuja()
   const reducirMovimiento = useReducedMotion()
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [items, setItems] = useState<ItemCanasta[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<AvisoEstado | null>(null)
+  const [aviso, setAvisoEstado] = useState<AvisoEstado | null>(null)
+
+  function setAviso(aviso: AvisoEstado | null) {
+    if (aviso?.tono === 'ok') {
+      setAvisoEstado(null)
+      avisar(aviso.texto)
+      return
+    }
+    setAvisoEstado(aviso)
+  }
   const [ocupado, setOcupado] = useState(false)
   const [imagenLista, setImagenLista] = useState<Blob | null>(null)
   const [archivoCelular, setArchivoCelular] = useState<File | null>(null)

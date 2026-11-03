@@ -4,6 +4,7 @@ import { BotonAccion } from '../components/BotonAccion.tsx'
 import { FormularioValor } from '../components/FormularioValor.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
+import { useBurbuja } from '../context/useBurbuja.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { CLAVE_PRECIOS, leerCache, pedirDatos, reemplazarCache } from '../lib/cacheLectura.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
@@ -25,6 +26,7 @@ type Mensaje = { tipo: 'exito' | 'error'; texto: string }
 export function Catalogo() {
   const { nombre, subtitulo, acento } = secciones.catalogo
   const { enLinea } = useConexion()
+  const avisar = useBurbuja()
   const [precios, setPrecios] = useState<Precio[]>(() => leerCache<Precio[]>(CLAVE_PRECIOS) ?? [])
   const [cargando, setCargando] = useState(() => leerCache<Precio[]>(CLAVE_PRECIOS) == null)
   const [errorCarga, setErrorCarga] = useState<string | null>(null)
@@ -105,7 +107,7 @@ export function Catalogo() {
     if (!lista.ok) fallar('El valor se guardó, pero no se pudo actualizar la lista.')
     else {
       publicar(lista.datos)
-      setMensaje({ tipo: 'exito', texto: 'Valor agregado.' })
+      avisar('Valor agregado.')
       setAgregando(false)
     }
     setOcupado(false)
@@ -128,7 +130,7 @@ export function Catalogo() {
     if (!lista.ok) fallar('El valor se actualizó, pero no se pudo actualizar la lista.')
     else {
       publicar(lista.datos)
-      setMensaje({ tipo: 'exito', texto: 'Valor actualizado.' })
+      avisar('Valor actualizado.')
       setEditandoId(null)
     }
     setOcupado(false)
@@ -151,7 +153,7 @@ export function Catalogo() {
     if (!lista.ok) fallar('El valor se eliminó, pero no se pudo actualizar la lista.')
     else {
       publicar(lista.datos)
-      setMensaje({ tipo: 'exito', texto: 'Valor eliminado.' })
+      avisar('Valor eliminado.')
       setEliminandoId(null)
     }
     setOcupado(false)
@@ -174,7 +176,7 @@ export function Catalogo() {
     if (!lista.ok) fallar('El orden cambió, pero no se pudo actualizar la lista.')
     else {
       publicar(lista.datos)
-      setMensaje({ tipo: 'exito', texto: 'Orden actualizado.' })
+      avisar('Orden actualizado.')
     }
     setOcupado(false)
   }
@@ -192,7 +194,7 @@ export function Catalogo() {
     if (!resultado.ok) fallar(resultado.mensaje)
     else {
       publicar(resultado.datos)
-      setMensaje({ tipo: 'exito', texto: 'Valores de ejemplo creados.' })
+      avisar('Valores de ejemplo creados.')
     }
     setCreandoEjemplo(false)
     setOcupado(false)
@@ -203,11 +205,6 @@ export function Catalogo() {
   return (
     <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
       <section aria-busy={cargando || ocupado} className="flex flex-col gap-4">
-        {mensaje?.tipo === 'exito' ? (
-          <p role="status" className="rounded-3xl px-5 py-4 text-sm" style={{ backgroundColor: acento }}>
-            {mensaje.texto}
-          </p>
-        ) : null}
         {mensaje?.tipo === 'error' && !agregando && !editandoId && !eliminandoId ? (
           <Aviso>{mensaje.texto}</Aviso>
         ) : null}

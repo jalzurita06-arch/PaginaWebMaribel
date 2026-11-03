@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { CargandoSesion } from './components/CargandoSesion.tsx'
 import { FranjaConexion } from './components/FranjaConexion.tsx'
 import { RutaProtegida } from './components/RutaProtegida.tsx'
+import { ProveedorBurbuja } from './context/ProveedorBurbuja.tsx'
 import { ProveedorConexion } from './context/ProveedorConexion.tsx'
 import { ProveedorMovimiento } from './context/ProveedorMovimiento.tsx'
 import { ProveedorSesion } from './context/ProveedorSesion.tsx'
@@ -92,11 +93,13 @@ export default function App() {
       <ProveedorConexion>
         <ProveedorSesion>
           <BrowserRouter>
-            <ProveedorTransicion>
-              <FranjaConexion />
-              <PrecargaDatos />
-              <Rutas />
-            </ProveedorTransicion>
+            <ProveedorBurbuja>
+              <ProveedorTransicion>
+                <FranjaConexion />
+                <PrecargaDatos />
+                <Rutas />
+              </ProveedorTransicion>
+            </ProveedorBurbuja>
           </BrowserRouter>
         </ProveedorSesion>
       </ProveedorConexion>

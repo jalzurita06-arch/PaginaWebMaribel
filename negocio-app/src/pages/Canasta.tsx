@@ -10,8 +10,10 @@ import { Layout } from '../components/Layout.tsx'
 import { MenuInferior } from '../components/MenuInferior.tsx'
 import { PanelEditarPedido, textoFechaPedido, type PedidoAEditar } from '../components/PanelEditarPedido.tsx'
 import { FilaTablaDesplegable, PanelDesplegable, transicionDesplegar } from '../components/PanelDesplegable.tsx'
+import { Abonos } from './Abonos.tsx'
 import { Venta } from './Venta.tsx'
 import { secciones } from '../config/secciones.ts'
+import { useBurbuja } from '../context/useBurbuja.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { abonoAtrasado, ultimasFechasAbono } from '../lib/abonoAtrasado.ts'
 import {
@@ -28,7 +30,10 @@ import { subirAlInicio } from '../lib/dispositivo.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
-import { canastaAbiertaDesdeEstado, rutaAbonoDesdeCanasta } from '../lib/navegacion.ts'
+import { canastaAbiertaDesdeEstado } from '../lib/navegacion.ts'
+import { armarReporteCanasta } from '../lib/reporteCanasta.ts'
+import { descargarReporteExcel } from '../lib/reporteCanastaExcel.ts'
+import { descargarReporteCanastas } from '../lib/reporteCanastaPdf.ts'
 import {
   ORDENES_CANASTA,
   ordenarCanastasAbiertas,
@@ -104,6 +109,7 @@ export function Canasta() {
   const ubicacion = useLocation()
   const abiertaInicial = canastaAbiertaDesdeEstado(ubicacion.state)
   const { enLinea } = useConexion()
+  const avisar = useBurbuja()
   const esPc = usePantallaPc()
   const montado = useRef(true)
   const generacion = useRef(0)
@@ -137,9 +143,15 @@ export function Canasta() {
   const [pedidoBorrar, setPedidoBorrar] = useState<PedidoAEditar | null>(null)
   const [borrandoPedido, setBorrandoPedido] = useState(false)
   const [menuVentaId, setMenuVentaId] = useState<string | null>(null)
+  const [menuAbonoId, setMenuAbonoId] = useState<string | null>(null)
 
   function cerrarMenuVenta() {
     setMenuVentaId(null)
+    setRecarga((valor) => valor + 1)
+  }
+
+  function cerrarMenuAbono() {
+    setMenuAbonoId(null)
     setRecarga((valor) => valor + 1)
   }
 
@@ -273,6 +285,11 @@ export function Canasta() {
   }, [cargando])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
+    if (tono === 'ok') {
+      setAviso(null)
+      avisar(texto)
+      return
+    }
     setAviso({ texto, tono })
     subirAlInicio()
   }
@@ -365,6 +382,16 @@ export function Canasta() {
     subirAlInicio()
   }
 
+  function descargarReporte(formato: 'pdf' | 'excel') {
+    if (errorAbonos || ultimosAbonos == null) return
+    const filas = armarReporteCanasta(ordenarCanastasAbiertas(canastas, orden), abonosPorCliente)
+    if (formato === 'excel') void descargarReporteExcel(filas).then(() => avisar('Excel descargado.'))
+    else {
+      descargarReporteCanastas(filas)
+      avisar('PDF descargado.')
+    }
+  }
+
   return (
     <Layout titulo={nombre} subtitulo={subtitulo} acento={acento} amplio>
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
@@ -397,7 +424,10 @@ export function Canasta() {
               saldo={resumenAbiertas.saldo}
               prendas={resumenAbiertas.prendas}
               reducirMovimiento={reducirMovimiento}
+              mostrarDescarga={canastas.length > 0}
+              puedeDescargar={!errorAbonos && ultimosAbonos != null}
               onHistorial={() => irA('historial')}
+              onDescargar={descargarReporte}
             />
           ) : null}
 
@@ -442,7 +472,14 @@ export function Canasta() {
               onConfirmar={(canasta, tipo) => void confirmarEnvio(canasta, tipo)}
               onEditarPedido={abrirEdicionPedido}
               onBorrarPedido={abrirBorradoPedido}
-              onVenta={(id) => setMenuVentaId(id)}
+              onVenta={(id) => {
+                setMenuAbonoId(null)
+                setMenuVentaId(id)
+              }}
+              onAbono={(id) => {
+                setMenuVentaId(null)
+                setMenuAbonoId(id)
+              }}
             />
           ) : null}
 
@@ -477,7 +514,14 @@ export function Canasta() {
                   onConfirmar={(tipo) => void confirmarEnvio(canasta, tipo)}
                   onEditarPedido={(dia) => abrirEdicionPedido(canasta, dia)}
                   onBorrarPedido={(dia) => abrirBorradoPedido(canasta, dia)}
-                  onVenta={() => setMenuVentaId(canasta.clienteId)}
+                  onVenta={() => {
+                    setMenuAbonoId(null)
+                    setMenuVentaId(canasta.clienteId)
+                  }}
+                  onAbono={() => {
+                    setMenuVentaId(null)
+                    setMenuAbonoId(canasta.clienteId)
+                  }}
                 />
               ))}
             </ul>
@@ -505,7 +549,7 @@ export function Canasta() {
         onCerrar={() => setPedidoEdicion(null)}
         onGuardado={() => {
           setPedidoEdicion(null)
-          setAviso({ texto: 'Pedido actualizado correctamente.', tono: 'ok' })
+          mostrar('Pedido actualizado.', 'ok')
           setRecarga((valor) => valor + 1)
         }}
       />
@@ -523,6 +567,17 @@ export function Canasta() {
       <MenuInferior abierto={menuVentaId != null} etiqueta="Venta" onCerrar={cerrarMenuVenta}>
         {menuVentaId ? (
           <Venta embebida clienteInicialId={menuVentaId} onCerrar={cerrarMenuVenta} />
+        ) : null}
+      </MenuInferior>
+
+      <MenuInferior
+        abierto={menuAbonoId != null}
+        etiqueta="Abono"
+        onCerrar={cerrarMenuAbono}
+        permiteScroll
+      >
+        {menuAbonoId ? (
+          <Abonos embebida clienteInicialId={menuAbonoId} onCerrar={cerrarMenuAbono} />
         ) : null}
       </MenuInferior>
     </Layout>
@@ -559,14 +614,20 @@ function ResumenAbiertas({
   saldo,
   prendas,
   reducirMovimiento,
+  mostrarDescarga,
+  puedeDescargar,
   onHistorial,
+  onDescargar,
 }: {
   acento: string
   total: number
   saldo: number
   prendas: number
   reducirMovimiento: boolean | null
+  mostrarDescarga: boolean
+  puedeDescargar: boolean
   onHistorial: () => void
+  onDescargar: (formato: 'pdf' | 'excel') => void
 }) {
   return (
     <section className="flex flex-col gap-5 rounded-3xl p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between lg:gap-8 lg:p-8" style={{ backgroundColor: acento }}>
@@ -584,16 +645,232 @@ function ResumenAbiertas({
           <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl">{prendas}</dd>
         </div>
       </dl>
-      <motion.button
-        type="button"
-        onClick={onHistorial}
-        whileTap={reducirMovimiento ? undefined : toque}
-        transition={{ duration: 0.15 }}
-        className={`${boton} bg-black text-white lg:w-auto lg:shrink-0 lg:px-6`}
-      >
-        Historial de la semana
-      </motion.button>
+      <div className="flex flex-col gap-3 lg:w-auto lg:shrink-0">
+        <motion.button
+          type="button"
+          onClick={onHistorial}
+          whileTap={reducirMovimiento ? undefined : toque}
+          transition={{ duration: 0.15 }}
+          className={`${boton} bg-black text-white lg:w-auto lg:px-6`}
+        >
+          Historial de la semana
+        </motion.button>
+        {mostrarDescarga ? (
+          <MenuDescarga
+            puedeDescargar={puedeDescargar}
+            reducirMovimiento={reducirMovimiento}
+            onElegir={onDescargar}
+          />
+        ) : null}
+      </div>
     </section>
+  )
+}
+
+function MenuDescarga({
+  puedeDescargar,
+  reducirMovimiento,
+  onElegir,
+}: {
+  puedeDescargar: boolean
+  reducirMovimiento: boolean | null
+  onElegir: (formato: 'pdf' | 'excel') => void
+}) {
+  const esPc = usePantallaPc()
+  const panelId = useId()
+  const tituloId = useId()
+  const refBoton = useRef<HTMLButtonElement>(null)
+  const refPanel = useRef<HTMLDivElement>(null)
+  const [abierto, setAbierto] = useState(false)
+  const [caja, setCaja] = useState<{
+    top?: number
+    bottom?: number
+    right: number
+    width: number
+    maxHeight: number
+  } | null>(null)
+  const salto = reducirMovimiento === true
+  const transicion = salto ? { duration: 0 } : transicionDesplegar
+
+  function cerrar() {
+    setAbierto(false)
+  }
+
+  function elegir(formato: 'pdf' | 'excel') {
+    onElegir(formato)
+    cerrar()
+  }
+
+  useEffect(() => {
+    if (!abierto || !esPc) {
+      setCaja(null)
+      return
+    }
+
+    function ubicar() {
+      const boton = refBoton.current?.getBoundingClientRect()
+      if (!boton) return
+      const margen = 8
+      const ancho = Math.max(boton.width, 176)
+      const altoEstimado = 160
+      const espacioAbajo = window.innerHeight - boton.bottom - margen
+      const espacioArriba = boton.top - margen
+      const abrirArriba = espacioAbajo < Math.min(altoEstimado, 160) && espacioArriba > espacioAbajo
+      const maxHeight = Math.max(120, (abrirArriba ? espacioArriba : espacioAbajo) - 8)
+
+      setCaja(
+        abrirArriba
+          ? {
+              bottom: window.innerHeight - boton.top + margen,
+              right: window.innerWidth - boton.right,
+              width: ancho,
+              maxHeight,
+            }
+          : {
+              top: boton.bottom + margen,
+              right: window.innerWidth - boton.right,
+              width: ancho,
+              maxHeight,
+            },
+      )
+    }
+
+    ubicar()
+    window.addEventListener('resize', ubicar)
+    window.addEventListener('scroll', ubicar, true)
+    return () => {
+      window.removeEventListener('resize', ubicar)
+      window.removeEventListener('scroll', ubicar, true)
+    }
+  }, [abierto, esPc])
+
+  useEffect(() => {
+    if (!abierto) return
+    if (esPc && !caja) return
+    refPanel.current?.querySelector('button')?.focus()
+  }, [abierto, caja, esPc])
+
+  useEffect(() => {
+    if (!abierto) return
+    function cerrarTecla(evento: KeyboardEvent) {
+      if (evento.key === 'Escape') cerrar()
+    }
+    window.addEventListener('keydown', cerrarTecla)
+    return () => window.removeEventListener('keydown', cerrarTecla)
+  }, [abierto])
+
+  useEffect(() => {
+    if (!abierto || !esPc) return
+    function cerrarClic(evento: Event) {
+      const destino = evento.target
+      if (!(destino instanceof Node)) return
+      if (refBoton.current?.contains(destino) || refPanel.current?.contains(destino)) return
+      cerrar()
+    }
+    document.addEventListener('mousedown', cerrarClic)
+    return () => document.removeEventListener('mousedown', cerrarClic)
+  }, [abierto, esPc])
+
+  useEffect(() => {
+    if (!abierto) return
+    const boton = refBoton.current
+    return () => boton?.focus()
+  }, [abierto])
+
+  const opciones = (
+    <>
+      <button type="button" onClick={() => elegir('pdf')} className={`${boton} bg-black text-white`}>
+        PDF
+      </button>
+      <button type="button" onClick={() => elegir('excel')} className={`${boton} bg-black/5`}>
+        Excel
+      </button>
+    </>
+  )
+
+  const panel = createPortal(
+    <AnimatePresence>
+      {abierto && (!esPc || caja) ? (
+        esPc && caja ? (
+          <motion.div
+            key="descarga-pc"
+            ref={refPanel}
+            id={panelId}
+            role="group"
+            aria-label="Descargar como"
+            initial={salto ? false : { opacity: 0, y: caja.bottom != null ? 8 : -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={salto ? undefined : { opacity: 0, y: caja.bottom != null ? 8 : -8 }}
+            transition={transicion}
+            className="fixed z-50 flex flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
+            style={{
+              top: caja.top,
+              bottom: caja.bottom,
+              right: caja.right,
+              width: caja.width,
+              maxHeight: caja.maxHeight,
+            }}
+          >
+            {opciones}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="descarga-movil"
+            className="fixed inset-0 z-50"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloId}
+            initial={salto ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={salto ? undefined : { opacity: 0 }}
+            transition={transicion}
+          >
+            <button
+              type="button"
+              aria-label="Cerrar descarga"
+              onClick={cerrar}
+              className="absolute inset-0 bg-black/25"
+            />
+            <motion.div
+              ref={refPanel}
+              id={panelId}
+              role="group"
+              aria-label="Descargar como"
+              initial={salto ? false : { opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={salto ? undefined : { opacity: 0, y: 28 }}
+              transition={transicion}
+              className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-md flex-col gap-2 rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md"
+            >
+              <p id={tituloId} className="px-2 pb-1 text-sm text-black/60">
+                Descargar como
+              </p>
+              {opciones}
+            </motion.div>
+          </motion.div>
+        )
+      ) : null}
+    </AnimatePresence>,
+    document.body,
+  )
+
+  return (
+    <div className="relative lg:w-auto">
+      <button
+        ref={refBoton}
+        type="button"
+        disabled={!puedeDescargar}
+        aria-expanded={abierto}
+        aria-controls={panelId}
+        aria-haspopup={esPc ? 'true' : 'dialog'}
+        onClick={() => (abierto ? cerrar() : setAbierto(true))}
+        className={`${boton} justify-between bg-white text-black lg:w-auto lg:px-6`}
+      >
+        Descargar
+        {abierto ? <ChevronUp aria-hidden size={18} /> : <ChevronDown aria-hidden size={18} />}
+      </button>
+      {panel}
+    </div>
   )
 }
 
@@ -620,6 +897,7 @@ function FilaCanasta({
   onEditarPedido,
   onBorrarPedido,
   onVenta,
+  onAbono,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -638,6 +916,7 @@ function FilaCanasta({
   onEditarPedido?: (dia: GrupoDia) => void
   onBorrarPedido?: (dia: GrupoDia) => void
   onVenta: () => void
+  onAbono: () => void
 }) {
   const detalleId = useId()
 
@@ -704,6 +983,7 @@ function FilaCanasta({
           onElegirTipo={onElegirTipo}
           onConfirmar={onConfirmar}
           onVenta={onVenta}
+          onAbono={onAbono}
         />
       </div>
     </li>
@@ -728,6 +1008,7 @@ function TablaCanastas({
   onEditarPedido,
   onBorrarPedido,
   onVenta,
+  onAbono,
 }: {
   canastas: CanastaAbierta[]
   acento: string
@@ -746,6 +1027,7 @@ function TablaCanastas({
   onEditarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
   onBorrarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
   onVenta: (id: string) => void
+  onAbono: (id: string) => void
 }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
@@ -805,6 +1087,7 @@ function TablaCanastas({
                   onEditarPedido={(dia) => onEditarPedido?.(canasta, dia)}
                   onBorrarPedido={(dia) => onBorrarPedido?.(canasta, dia)}
                   onVenta={() => onVenta(canasta.clienteId)}
+                  onAbono={() => onAbono(canasta.clienteId)}
                 />
               )
             })}
@@ -833,6 +1116,7 @@ function FilasTabla({
   onEditarPedido,
   onBorrarPedido,
   onVenta,
+  onAbono,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -851,6 +1135,7 @@ function FilasTabla({
   onEditarPedido?: (dia: GrupoDia) => void
   onBorrarPedido?: (dia: GrupoDia) => void
   onVenta: () => void
+  onAbono: () => void
 }) {
   const detalleId = useId()
 
@@ -903,6 +1188,7 @@ function FilasTabla({
             onElegirTipo={onElegirTipo}
             onConfirmar={onConfirmar}
             onVenta={onVenta}
+            onAbono={onAbono}
           />
         </td>
       </tr>
@@ -1127,6 +1413,7 @@ function AccionesCanasta({
   onElegirTipo,
   onConfirmar,
   onVenta,
+  onAbono,
 }: {
   canasta: CanastaAbierta
   acento: string
@@ -1140,6 +1427,7 @@ function AccionesCanasta({
   onElegirTipo: (tipo: TipoEnvio) => void
   onConfirmar: (tipo: TipoEnvio) => void
   onVenta: () => void
+  onAbono: () => void
 }) {
   const reducirMovimiento = useReducedMotion()
   const bloqueado = ocupado && !enviando
@@ -1164,20 +1452,17 @@ function AccionesCanasta({
   )
 
   const abono = (
-    <Enlace
-      to={rutaAbonoDesdeCanasta(canasta.clienteId)}
-      aria-disabled={bloqueada || undefined}
-      tabIndex={bloqueada ? -1 : undefined}
-      onClick={(evento) => {
-        if (bloqueada) evento.preventDefault()
-      }}
+    <motion.button
+      type="button"
+      disabled={bloqueada}
+      onClick={onAbono}
       whileTap={reducirMovimiento || bloqueada ? undefined : toque}
       transition={{ duration: 0.15 }}
-      className={`${clase} ${bloqueada ? 'pointer-events-none opacity-50' : ''}`}
+      className={`${clase} ${bloqueada ? 'opacity-50' : ''}`}
       style={{ backgroundColor: secciones.abonos.acento }}
     >
       Abono
-    </Enlace>
+    </motion.button>
   )
 
   const bodega = (

@@ -9,6 +9,7 @@ import { ListaArrastrable } from '../components/ListaArrastrable.tsx'
 import { ResumenImagen } from '../components/ResumenImagen.tsx'
 import { VistaRecibo } from '../components/VistaRecibo.tsx'
 import { secciones } from '../config/secciones.ts'
+import { useBurbuja } from '../context/useBurbuja.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { CLAVE_PLANTILLA, leerCache, pedirDatos, reemplazarCache } from '../lib/cacheLectura.ts'
 import { formatearFechaRecibo } from '../lib/compartir.ts'
@@ -46,6 +47,7 @@ const EJEMPLO_GRUPOS = [
 export function Mensaje() {
   const { nombre, subtitulo, acento } = secciones.mensaje
   const { enLinea } = useConexion()
+  const avisar = useBurbuja()
   const [plantilla, setPlantilla] = useState<PlantillaCompartir | null>(() => {
     const guardada = leerCache<PlantillaCompartir>(CLAVE_PLANTILLA)
     return guardada ? normalizarPlantilla(guardada) : null
@@ -114,10 +116,7 @@ export function Mensaje() {
     }
     reemplazarCache(CLAVE_PLANTILLA, resultado.datos)
     setPlantilla(resultado.datos)
-    setMensaje({
-      tipo: 'exito',
-      texto: panel === 'imagen' ? 'Imagen guardada. Así se comparte desde ahora.' : 'Mensaje guardado. Así se comparte desde ahora.',
-    })
+    avisar(panel === 'imagen' ? 'Imagen guardada.' : 'Mensaje guardado.')
     setOcupado(false)
   }
 
@@ -133,11 +132,6 @@ export function Mensaje() {
   return (
     <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
       <section className="flex flex-col gap-4 lg:gap-6">
-        {mensaje?.tipo === 'exito' ? (
-          <p role="status" className="rounded-3xl px-5 py-4 text-sm" style={{ backgroundColor: acento }}>
-            {mensaje.texto}
-          </p>
-        ) : null}
         {mensaje?.tipo === 'error' ? <Aviso>{mensaje.texto}</Aviso> : null}
 
         {cargando && !plantilla ? <IndicadorCarga>Cargando mensaje…</IndicadorCarga> : null}

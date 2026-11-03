@@ -23,11 +23,13 @@ export function MenuInferior({
   etiqueta,
   onCerrar,
   children,
+  permiteScroll = false,
 }: {
   abierto: boolean
   etiqueta: string
   onCerrar: () => void
   children: ReactNode
+  permiteScroll?: boolean
 }) {
   const tituloId = useId()
   const refPanel = useRef<HTMLDivElement>(null)
@@ -104,7 +106,7 @@ export function MenuInferior({
               transition={transicion}
               className={
                 esPc
-                  ? 'pointer-events-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white pb-6 shadow-md outline-none'
+                  ? `pointer-events-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white pb-6 shadow-md outline-none ${permiteScroll ? 'max-h-[min(90dvh,52rem)]' : ''}`
                   : 'absolute inset-x-0 bottom-0 mx-auto flex max-h-[min(88dvh,40rem)] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-md outline-none'
               }
             >
@@ -118,7 +120,7 @@ export function MenuInferior({
                   {etiqueta}
                 </p>
               </div>
-              <div className={esPc ? 'px-5' : 'min-h-0 overflow-y-auto px-5'}>{children}</div>
+              <div className={esPc && !permiteScroll ? 'px-5' : 'min-h-0 overflow-y-auto px-5'}>{children}</div>
             </motion.div>
           </div>
         </motion.div>

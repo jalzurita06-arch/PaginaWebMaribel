@@ -14,6 +14,7 @@ import { FormularioCliente } from '../components/FormularioCliente.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
+import { useBurbuja } from '../context/useBurbuja.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { CLAVE_CLIENTES, reemplazarCache } from '../lib/cacheLectura.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
@@ -81,6 +82,7 @@ function usePantallaPc() {
 export function Clientes() {
   const { nombre, subtitulo, acento } = secciones.clientes
   const { enLinea } = useConexion()
+  const avisar = useBurbuja()
   const esPc = usePantallaPc()
   const reducirMovimiento = useReducedMotion()
   const idBusqueda = useId()
@@ -137,6 +139,11 @@ export function Clientes() {
   }, [lista.error])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
+    if (tono === 'ok') {
+      setAviso(null)
+      avisar(texto)
+      return
+    }
     setAviso({ texto, tono })
     subirAlInicio()
   }

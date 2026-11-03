@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
-import { formatearDolares, redondear2 } from '../lib/dinero.ts'
+import { redondear2 } from '../lib/dinero.ts'
 import { validarAbono, type ErroresAbono } from '../lib/clienteFormulario.ts'
 import { useConexion } from '../context/useConexion.ts'
 import type { Cliente, Resultado } from '../services/clientes.ts'
@@ -44,7 +44,6 @@ export function FormularioAbono({
   const [fecha, setFecha] = useState(inicial?.fecha ?? fechaHoy)
   const [errores, setErrores] = useState<ErroresAbono>({})
   const [mensaje, setMensaje] = useState<string | null>(null)
-  const [mensajeExito, setMensajeExito] = useState<string | null>(null)
 
   useEffect(() => {
     if (autoFocus) {
@@ -56,7 +55,6 @@ export function FormularioAbono({
     evento.preventDefault()
     if (envio.current || guardando) return
     setMensaje(null)
-    setMensajeExito(null)
 
     const validacion = validarAbono({ monto, fecha })
     if (!validacion.ok) {
@@ -79,7 +77,7 @@ export function FormularioAbono({
 
     setMonto('')
     setErrores({})
-    setMensajeExito(`Abono de ${formatearDolares(validacion.datos.monto)} registrado.`)
+    setMensaje(null)
   }
 
   return (
@@ -108,7 +106,6 @@ export function FormularioAbono({
               setMonto(evento.target.value)
               setErrores((actual) => ({ ...actual, monto: undefined }))
               setMensaje(null)
-              setMensajeExito(null)
             }}
             className={campo}
           />
@@ -134,7 +131,6 @@ export function FormularioAbono({
               setFecha(evento.target.value)
               setErrores((actual) => ({ ...actual, fecha: undefined }))
               setMensaje(null)
-              setMensajeExito(null)
             }}
             className={campo}
           />
@@ -147,7 +143,6 @@ export function FormularioAbono({
         </div>
 
         {mensaje ? <Aviso>{mensaje}</Aviso> : null}
-        {mensajeExito ? <Aviso tono="ok">{mensajeExito}</Aviso> : null}
 
         <button
           type="submit"

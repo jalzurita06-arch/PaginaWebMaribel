@@ -10,6 +10,7 @@ import { FormularioAbono } from '../components/FormularioAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
 import { secciones } from '../config/secciones.ts'
+import { useBurbuja } from '../context/useBurbuja.ts'
 import { useConexion } from '../context/useConexion.ts'
 import { abonoAtrasado } from '../lib/abonoAtrasado.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
@@ -48,12 +49,21 @@ const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 
 type DetalleGuardado = { cliente: Cliente; total: number; abonos: Abono[] }
 
-export function Abonos() {
+export function Abonos({
+  embebida = false,
+  onCerrar,
+  clienteInicialId,
+}: {
+  embebida?: boolean
+  onCerrar?: () => void
+  clienteInicialId?: string
+} = {}) {
   const { nombre, subtitulo, acento } = secciones.abonos
+  const avisar = useBurbuja()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const clienteId = params.get('cliente')
-  const desdeCanasta = vieneDeCanasta('/abonos', params)
+  const clienteId = embebida ? (clienteInicialId ?? null) : params.get('cliente')
+  const desdeCanasta = !embebida && vieneDeCanasta('/abonos', params)
   const [busqueda, setBusqueda] = useState('')
   const [recargaLista, setRecargaLista] = useState(0)
   const [recargaDetalle, setRecargaDetalle] = useState(0)
@@ -160,8 +170,13 @@ export function Abonos() {
   }
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
+    if (tono === 'ok') {
+      setAviso(null)
+      avisar(texto)
+      return
+    }
     setAviso({ texto, tono })
-    subirAlInicio()
+    if (!embebida) subirAlInicio()
   }
 
   function elegirCliente(id: string) {
@@ -175,6 +190,10 @@ export function Abonos() {
     setAviso(null)
     setModo(null)
     setAbonoBorrar(null)
+    if (embebida) {
+      onCerrar?.()
+      return
+    }
     if (desdeCanasta) {
       navigate('/canasta', { replace: true, state: estadoCanastaAbierta(clienteId) })
       return
@@ -313,13 +332,8 @@ export function Abonos() {
     volverABuscar()
   }
 
-  return (
-    <Layout
-      titulo={nombre}
-      subtitulo={subtitulo}
-      acento={acento}
-      onAtras={clienteId ? atrasAbonos : undefined}
-    >
+  const flujo = (
+    <>
       {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
 
       <VistaAnimada vistaKey={claveVista}>
@@ -380,7 +394,7 @@ export function Abonos() {
         />
       ) : null}
 
-      {!clienteId ? (
+      {!clienteId && !embebida ? (
         <Buscador
           busqueda={busqueda}
           consulta={consulta}
@@ -395,6 +409,21 @@ export function Abonos() {
         />
       ) : null}
       </VistaAnimada>
+    </>
+  )
+
+  if (embebida) {
+    return <div className="flex flex-col gap-5 pb-2">{flujo}</div>
+  }
+
+  return (
+    <Layout
+      titulo={nombre}
+      subtitulo={subtitulo}
+      acento={acento}
+      onAtras={clienteId ? atrasAbonos : undefined}
+    >
+      {flujo}
     </Layout>
   )
 }

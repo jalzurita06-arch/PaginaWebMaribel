@@ -14,6 +14,7 @@ import {
 } from '../components/MenuEstadoCliente.tsx'
 import { PanelDesplegable } from '../components/PanelDesplegable.tsx'
 import { secciones } from '../config/secciones.ts'
+import { useBurbuja } from '../context/useBurbuja.ts'
 import { useConexion } from '../context/useConexion.ts'
 import {
   CLAVE_CLIENTES,
@@ -111,6 +112,7 @@ export function Venta({
 } = {}) {
   const { nombre, subtitulo, acento } = secciones.venta
   const { enLinea } = useConexion()
+  const avisar = useBurbuja()
   const esPc = usePantallaPc()
   const reducirMovimiento = useReducedMotion()
   const refPaso = useRef<HTMLHeadingElement>(null)
@@ -206,6 +208,11 @@ export function Venta({
   }, [embebida, clienteInicialId])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
+    if (tono === 'ok') {
+      setAviso(null)
+      avisar(texto)
+      return
+    }
     setAviso({ texto, tono })
     if (!embebida) subirAlInicio()
   }
@@ -420,6 +427,7 @@ export function Venta({
     }
     const venta = lineas.map((linea) => ({ precio: linea.precio, cantidad: linea.cantidad }))
     guardarMenuVenta(cliente.id, venta)
+    mostrar('Venta guardada.', 'ok')
     setVentaConfirmada(venta)
     setLineas([])
     setPrecioElegido(null)
@@ -436,6 +444,7 @@ export function Venta({
 
     setCliente(resultado.datos)
     olvidarDatosGuardados()
+    mostrar('Abono guardado.', 'ok')
     return resultado
   }
 
