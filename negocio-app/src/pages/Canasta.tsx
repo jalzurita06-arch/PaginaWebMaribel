@@ -385,11 +385,11 @@ export function Canasta() {
   function descargarReporte(formato: 'pdf' | 'excel') {
     if (errorAbonos || ultimosAbonos == null) return
     const filas = armarReporteCanasta(ordenarCanastasAbiertas(canastas, orden), abonosPorCliente)
-    if (formato === 'excel') void descargarReporteExcel(filas).then(() => avisar('Excel descargado.'))
-    else {
-      descargarReporteCanastas(filas)
-      avisar('PDF descargado.')
+    if (formato === 'excel') {
+      void descargarReporteExcel(filas).then(() => avisar('Excel descargado.'))
+      return
     }
+    void descargarReporteCanastas(filas).then(() => avisar('PDF descargado.'))
   }
 
   return (

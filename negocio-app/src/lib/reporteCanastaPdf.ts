@@ -1,4 +1,3 @@
-import { jsPDF, GState } from 'jspdf'
 import { formatearDolares } from './dinero.ts'
 import type { FilaReporteCanasta } from './reporteCanasta.ts'
 
@@ -11,7 +10,11 @@ const COL_CODIGO = 28
 const COL_CIFRA = 28
 const OPACIDAD_LINEA = 0.28
 
-export function descargarReporteCanastas(filas: FilaReporteCanasta[]) {
+type Documento = import('jspdf').jsPDF
+type ClaseEstado = typeof import('jspdf').GState
+
+export async function descargarReporteCanastas(filas: FilaReporteCanasta[]) {
+  const { jsPDF, GState } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'letter' })
   const ancho = doc.internal.pageSize.getWidth()
   const alto = doc.internal.pageSize.getHeight()
@@ -30,7 +33,7 @@ export function descargarReporteCanastas(filas: FilaReporteCanasta[]) {
   doc.setTextColor(0, 0, 0)
   doc.text('Canastas abiertas', MARGEN, y)
   y += 8
-  y = dibujarEncabezado(doc, y, xCifras, colNombre)
+  y = dibujarEncabezado(doc, y, xCifras, colNombre, GState)
 
   for (const fila of filas) {
     const lineasNombre = lineasDeNombre(doc, fila.nombre, colNombre)
@@ -39,17 +42,23 @@ export function descargarReporteCanastas(filas: FilaReporteCanasta[]) {
     if (y > MARGEN + 10 && y + altoFila > limite) {
       doc.addPage()
       y = MARGEN
-      y = dibujarEncabezado(doc, y, xCifras, colNombre)
+      y = dibujarEncabezado(doc, y, xCifras, colNombre, GState)
     }
     dibujarFila(doc, fila, y, xCifras, lineasNombre)
-    dibujarLineaFila(doc, y + 3.2 + extraNombre, anchoUtil)
+    dibujarLineaFila(doc, y + 3.2 + extraNombre, anchoUtil, GState)
     y += altoFila
   }
 
   doc.save('canastas-abiertas.pdf')
 }
 
-function dibujarEncabezado(doc: jsPDF, y: number, xCifras: number[], colNombre: number): number {
+function dibujarEncabezado(
+  doc: Documento,
+  y: number,
+  xCifras: number[],
+  colNombre: number,
+  Estado: ClaseEstado,
+): number {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(8)
   doc.setTextColor(80, 80, 80)
@@ -59,12 +68,12 @@ function dibujarEncabezado(doc: jsPDF, y: number, xCifras: number[], colNombre: 
   doc.text('Abonado', xCifras[1]! + COL_CIFRA, y, { align: 'right' })
   doc.text('Saldo', xCifras[2]! + COL_CIFRA, y, { align: 'right' })
   y += 2.2
-  dibujarLineaFila(doc, y, COL_CODIGO + colNombre + COL_CIFRA * 3)
+  dibujarLineaFila(doc, y, COL_CODIGO + colNombre + COL_CIFRA * 3, Estado)
   doc.setTextColor(0, 0, 0)
   return y + 4.2
 }
 
-function dibujarFila(doc: jsPDF, fila: FilaReporteCanasta, y: number, xCifras: number[], lineasNombre: string[]) {
+function dibujarFila(doc: Documento, fila: FilaReporteCanasta, y: number, xCifras: number[], lineasNombre: string[]) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
   const codigo = fila.codigo.toUpperCase()
@@ -92,16 +101,16 @@ function dibujarFila(doc: jsPDF, fila: FilaReporteCanasta, y: number, xCifras: n
   doc.text(formatearDolares(fila.saldo), xCifras[2]! + COL_CIFRA, y, { align: 'right' })
 }
 
-function dibujarLineaFila(doc: jsPDF, y: number, anchoUtil: number) {
+function dibujarLineaFila(doc: Documento, y: number, anchoUtil: number, Estado: ClaseEstado) {
   doc.saveGraphicsState()
-  doc.setGState(new GState({ opacity: OPACIDAD_LINEA, 'stroke-opacity': OPACIDAD_LINEA }))
+  doc.setGState(new Estado({ opacity: OPACIDAD_LINEA, 'stroke-opacity': OPACIDAD_LINEA }))
   doc.setDrawColor(90, 90, 90)
   doc.setLineWidth(0.2)
   doc.line(MARGEN, y, MARGEN + anchoUtil, y)
   doc.restoreGraphicsState()
 }
 
-function lineasDeNombre(doc: jsPDF, nombre: string | null, colNombre: number): string[] {
+function lineasDeNombre(doc: Documento, nombre: string | null, colNombre: number): string[] {
   if (!nombre) return []
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
@@ -109,7 +118,7 @@ function lineasDeNombre(doc: jsPDF, nombre: string | null, colNombre: number): s
 }
 
 /** Círculo alerta #c1142e con campana blanca, como CampanaAbono. */
-function dibujarCampanaRoja(doc: jsPDF, cx: number, cy: number) {
+function dibujarCampanaRoja(doc: Documento, cx: number, cy: number) {
   const r = CAMPANA / 2
   doc.setFillColor(COLOR_ALERTA.r, COLOR_ALERTA.g, COLOR_ALERTA.b)
   doc.circle(cx, cy, r, 'F')

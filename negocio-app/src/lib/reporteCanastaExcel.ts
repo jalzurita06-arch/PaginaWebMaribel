@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs'
+import type ExcelJS from 'exceljs'
 import { redondear2 } from './dinero.ts'
 import type { FilaReporteCanasta } from './reporteCanasta.ts'
 
@@ -40,6 +40,7 @@ export async function descargarReporteExcel(filas: FilaReporteCanasta[]) {
 }
 
 export async function armarLibroExcel(filas: FilaReporteCanasta[]): Promise<ExcelJS.Workbook> {
+  const ExcelJS = (await import('exceljs')).default
   const libro = new ExcelJS.Workbook()
   const hoja = libro.addWorksheet('Canastas abiertas')
   const datos = armarHojaExcel(filas)
