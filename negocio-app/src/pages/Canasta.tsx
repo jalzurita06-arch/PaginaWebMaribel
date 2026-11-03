@@ -630,22 +630,22 @@ function ResumenAbiertas({
   onDescargar: (formato: 'pdf' | 'excel') => void
 }) {
   return (
-    <section className="flex flex-col gap-5 rounded-3xl p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between lg:gap-8 lg:p-8" style={{ backgroundColor: acento }}>
-      <dl className="grid grid-cols-3 gap-3 lg:min-w-0 lg:flex-1 lg:gap-10">
+    <section className="flex flex-col gap-5 rounded-3xl p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:p-8" style={{ backgroundColor: acento }}>
+      <dl className="grid grid-cols-3 items-center gap-3 lg:min-w-0 lg:flex-1 lg:gap-8">
         <div>
           <dt className="text-sm">Total</dt>
-          <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl">{formatearDolares(total)}</dd>
+          <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl lg:text-4xl xl:text-3xl">{formatearDolares(total)}</dd>
         </div>
         <div>
           <dt className="text-sm">Saldo</dt>
-          <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl">{formatearDolares(saldo)}</dd>
+          <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl lg:text-4xl xl:text-3xl">{formatearDolares(saldo)}</dd>
         </div>
         <div>
           <dt className="text-sm">Cant. prendas</dt>
-          <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl">{prendas}</dd>
+          <dd className="font-display text-2xl leading-none tracking-wide sm:text-3xl lg:text-4xl xl:text-3xl">{prendas}</dd>
         </div>
       </dl>
-      <div className="flex flex-col gap-3 lg:w-auto lg:shrink-0">
+      <div className="flex flex-col gap-3 lg:w-auto lg:shrink-0 lg:flex-row lg:items-center">
         <motion.button
           type="button"
           onClick={onHistorial}
