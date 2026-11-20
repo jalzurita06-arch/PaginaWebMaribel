@@ -44,9 +44,12 @@ import {
   type OrdenCanasta,
 } from '../lib/reglas.ts'
 import {
+  MENSAJE_CANASTA_ELIMINADA,
   MENSAJE_CANASTA_VACIA,
-  TIPOS_ENVIO,
+  MENSAJE_CANASTA_VACIA_ELIMINAR,
+  TIPO_ENVIO_DIRECTO,
   borrarEnviosAntiguos,
+  eliminarCanastaSinEnvio,
   listarCanastasAbiertas,
   listarEnviosSemana,
   mensajeEnvioConfirmado,
@@ -59,9 +62,9 @@ import { borrarPedidoFecha } from '../services/canasta.ts'
 import { listarAbonosDeClientes, type Abono } from '../services/clientes.ts'
 
 type AvisoEstado = { texto: string; tono: 'ok' | 'error' }
-type PasoSelector = 'menu' | 'tipo'
+type PasoSelector = 'menu' | 'confirmar-envio' | 'confirmar-eliminar'
 type VistaCanasta = 'abiertas' | 'historial'
-type Selector = { clienteId: string; paso: PasoSelector; tipo: TipoEnvio | null }
+type Selector = { clienteId: string; paso: PasoSelector }
 
 const botonBase =
   'inline-flex touch-manipulation items-center justify-center rounded-full text-center [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
@@ -294,7 +297,7 @@ export function Canasta() {
     subirAlInicio()
   }
 
-  async function confirmarEnvio(canasta: CanastaAbierta, tipo: TipoEnvio) {
+  async function confirmarEnvio(canasta: CanastaAbierta) {
     if (enviando.current) return
     if (!enLinea) {
       mostrar(MENSAJE_FALLO_RED, 'error')
@@ -303,7 +306,7 @@ export function Canasta() {
     enviando.current = true
     setEnviandoId(canasta.clienteId)
     setAviso(null)
-    const resultado = await registrarEnvio(canasta.clienteId, tipo)
+    const resultado = await registrarEnvio(canasta.clienteId, TIPO_ENVIO_DIRECTO)
     if (!montado.current) return
     enviando.current = false
     setEnviandoId(null)
@@ -357,6 +360,55 @@ export function Canasta() {
     if (enviosNuevos.ok) {
       reemplazarCache(CLAVE_ENVIOS, enviosNuevos.datos)
       setEnvios(enviosNuevos.datos)
+    }
+  }
+
+  async function confirmarEliminacion(canasta: CanastaAbierta) {
+    if (enviando.current) return
+    if (!enLinea) {
+      mostrar(MENSAJE_FALLO_RED, 'error')
+      return
+    }
+    enviando.current = true
+    setEnviandoId(canasta.clienteId)
+    setAviso(null)
+    const resultado = await eliminarCanastaSinEnvio(canasta.clienteId)
+    if (!montado.current) return
+    enviando.current = false
+    setEnviandoId(null)
+
+    if (!resultado.ok) {
+      mostrar(resultado.mensaje, 'error')
+      if (resultado.mensaje === MENSAJE_CANASTA_VACIA_ELIMINAR) {
+        setCanastas((actual) => actual.filter((fila) => fila.clienteId !== canasta.clienteId))
+        setSelector(null)
+      }
+      return
+    }
+
+    let siguientesCanastas: CanastaAbierta[] | null = null
+    setCanastas((actual) => {
+      siguientesCanastas = actual.filter((fila) => fila.clienteId !== canasta.clienteId)
+      return siguientesCanastas
+    })
+    generacion.current += 1
+    if (siguientesCanastas) reemplazarCache(CLAVE_CANASTAS, siguientesCanastas)
+    setAbonosPorCliente((actual) => {
+      const siguientes = { ...actual }
+      delete siguientes[canasta.clienteId]
+      reemplazarCache(CLAVE_ABONOS_CANASTA, siguientes)
+      return siguientes
+    })
+    borrarCache(claveDetalleAbono(canasta.clienteId))
+    setSelector(null)
+    setAbiertaId((actual) => (actual === canasta.clienteId ? null : actual))
+    mostrar(MENSAJE_CANASTA_ELIMINADA, 'ok')
+
+    const canastasNuevas = await listarCanastasAbiertas()
+    if (!montado.current) return
+    if (canastasNuevas.ok) {
+      reemplazarCache(CLAVE_CANASTAS, canastasNuevas.datos)
+      setCanastas(canastasNuevas.datos)
     }
   }
 
@@ -463,13 +515,12 @@ export function Canasta() {
               ocupado={ocupado}
               enviandoId={enviandoId}
               onAlternar={(id) => setAbiertaId((actual) => (actual === id ? null : id))}
-              onAbrirSelector={(id) => setSelector({ clienteId: id, paso: 'menu', tipo: null })}
+              onAbrirSelector={(id) => setSelector({ clienteId: id, paso: 'menu' })}
               onCerrarSelector={() => setSelector(null)}
-              onEnviado={(id) => setSelector({ clienteId: id, paso: 'tipo', tipo: null })}
-              onElegirTipo={(id, tipo) =>
-                setSelector((actual) => (actual?.clienteId === id ? { ...actual, tipo } : actual))
-              }
-              onConfirmar={(canasta, tipo) => void confirmarEnvio(canasta, tipo)}
+              onEnviado={(id) => setSelector({ clienteId: id, paso: 'confirmar-envio' })}
+              onEliminar={(id) => setSelector({ clienteId: id, paso: 'confirmar-eliminar' })}
+              onConfirmarEnvio={(canasta) => void confirmarEnvio(canasta)}
+              onConfirmarEliminar={(canasta) => void confirmarEliminacion(canasta)}
               onEditarPedido={abrirEdicionPedido}
               onBorrarPedido={abrirBorradoPedido}
               onVenta={(id) => {
@@ -489,7 +540,6 @@ export function Canasta() {
                 <FilaCanasta
                   key={canasta.clienteId}
                   canasta={canasta}
-                  acento={acento}
                   sinAbono={sinAbono(canasta.clienteId)}
                   abonos={errorAbonos ? null : (abonosPorCliente[canasta.clienteId] ?? [])}
                   abierta={abiertaId === canasta.clienteId}
@@ -499,19 +549,14 @@ export function Canasta() {
                   onAlternar={() =>
                     setAbiertaId((actual) => (actual === canasta.clienteId ? null : canasta.clienteId))
                   }
-                  onAbrirSelector={() =>
-                    setSelector({ clienteId: canasta.clienteId, paso: 'menu', tipo: null })
-                  }
+                  onAbrirSelector={() => setSelector({ clienteId: canasta.clienteId, paso: 'menu' })}
                   onCerrarSelector={() => setSelector(null)}
-                  onEnviado={() =>
-                    setSelector({ clienteId: canasta.clienteId, paso: 'tipo', tipo: null })
+                  onEnviado={() => setSelector({ clienteId: canasta.clienteId, paso: 'confirmar-envio' })}
+                  onEliminar={() =>
+                    setSelector({ clienteId: canasta.clienteId, paso: 'confirmar-eliminar' })
                   }
-                  onElegirTipo={(tipo) =>
-                    setSelector((actual) =>
-                      actual?.clienteId === canasta.clienteId ? { ...actual, tipo } : actual,
-                    )
-                  }
-                  onConfirmar={(tipo) => void confirmarEnvio(canasta, tipo)}
+                  onConfirmarEnvio={() => void confirmarEnvio(canasta)}
+                  onConfirmarEliminar={() => void confirmarEliminacion(canasta)}
                   onEditarPedido={(dia) => abrirEdicionPedido(canasta, dia)}
                   onBorrarPedido={(dia) => abrirBorradoPedido(canasta, dia)}
                   onVenta={() => {
@@ -881,7 +926,6 @@ function NombreCliente({ nombre, className }: { nombre: string | null; className
 
 function FilaCanasta({
   canasta,
-  acento,
   sinAbono,
   abonos,
   abierta,
@@ -892,15 +936,15 @@ function FilaCanasta({
   onAbrirSelector,
   onCerrarSelector,
   onEnviado,
-  onElegirTipo,
-  onConfirmar,
+  onEliminar,
+  onConfirmarEnvio,
+  onConfirmarEliminar,
   onEditarPedido,
   onBorrarPedido,
   onVenta,
   onAbono,
 }: {
   canasta: CanastaAbierta
-  acento: string
   sinAbono: boolean
   abonos: Abono[] | null
   abierta: boolean
@@ -911,8 +955,9 @@ function FilaCanasta({
   onAbrirSelector: () => void
   onCerrarSelector: () => void
   onEnviado: () => void
-  onElegirTipo: (tipo: TipoEnvio) => void
-  onConfirmar: (tipo: TipoEnvio) => void
+  onEliminar: () => void
+  onConfirmarEnvio: () => void
+  onConfirmarEliminar: () => void
   onEditarPedido?: (dia: GrupoDia) => void
   onBorrarPedido?: (dia: GrupoDia) => void
   onVenta: () => void
@@ -973,15 +1018,15 @@ function FilaCanasta({
       <div className="pt-4">
         <AccionesCanasta
           canasta={canasta}
-          acento={acento}
           selector={selector}
           ocupado={ocupado}
           enviando={enviando}
           onAbrirSelector={onAbrirSelector}
           onCerrarSelector={onCerrarSelector}
           onEnviado={onEnviado}
-          onElegirTipo={onElegirTipo}
-          onConfirmar={onConfirmar}
+          onEliminar={onEliminar}
+          onConfirmarEnvio={onConfirmarEnvio}
+          onConfirmarEliminar={onConfirmarEliminar}
           onVenta={onVenta}
           onAbono={onAbono}
         />
@@ -1003,8 +1048,9 @@ function TablaCanastas({
   onAbrirSelector,
   onCerrarSelector,
   onEnviado,
-  onElegirTipo,
-  onConfirmar,
+  onEliminar,
+  onConfirmarEnvio,
+  onConfirmarEliminar,
   onEditarPedido,
   onBorrarPedido,
   onVenta,
@@ -1022,8 +1068,9 @@ function TablaCanastas({
   onAbrirSelector: (id: string) => void
   onCerrarSelector: () => void
   onEnviado: (id: string) => void
-  onElegirTipo: (id: string, tipo: TipoEnvio) => void
-  onConfirmar: (canasta: CanastaAbierta, tipo: TipoEnvio) => void
+  onEliminar: (id: string) => void
+  onConfirmarEnvio: (canasta: CanastaAbierta) => void
+  onConfirmarEliminar: (canasta: CanastaAbierta) => void
   onEditarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
   onBorrarPedido?: (canasta: CanastaAbierta, dia: GrupoDia) => void
   onVenta: (id: string) => void
@@ -1071,7 +1118,6 @@ function TablaCanastas({
                 <FilasTabla
                   key={canasta.clienteId}
                   canasta={canasta}
-                  acento={acento}
                   sinAbono={sinAbono(canasta.clienteId)}
                   abonos={abonosDe(canasta.clienteId)}
                   abierta={abierta}
@@ -1082,8 +1128,9 @@ function TablaCanastas({
                   onAbrirSelector={() => onAbrirSelector(canasta.clienteId)}
                   onCerrarSelector={onCerrarSelector}
                   onEnviado={() => onEnviado(canasta.clienteId)}
-                  onElegirTipo={(tipo) => onElegirTipo(canasta.clienteId, tipo)}
-                  onConfirmar={(tipo) => onConfirmar(canasta, tipo)}
+                  onEliminar={() => onEliminar(canasta.clienteId)}
+                  onConfirmarEnvio={() => onConfirmarEnvio(canasta)}
+                  onConfirmarEliminar={() => onConfirmarEliminar(canasta)}
                   onEditarPedido={(dia) => onEditarPedido?.(canasta, dia)}
                   onBorrarPedido={(dia) => onBorrarPedido?.(canasta, dia)}
                   onVenta={() => onVenta(canasta.clienteId)}
@@ -1100,7 +1147,6 @@ function TablaCanastas({
 
 function FilasTabla({
   canasta,
-  acento,
   sinAbono,
   abonos,
   abierta,
@@ -1111,15 +1157,15 @@ function FilasTabla({
   onAbrirSelector,
   onCerrarSelector,
   onEnviado,
-  onElegirTipo,
-  onConfirmar,
+  onEliminar,
+  onConfirmarEnvio,
+  onConfirmarEliminar,
   onEditarPedido,
   onBorrarPedido,
   onVenta,
   onAbono,
 }: {
   canasta: CanastaAbierta
-  acento: string
   sinAbono: boolean
   abonos: Abono[] | null
   abierta: boolean
@@ -1130,8 +1176,9 @@ function FilasTabla({
   onAbrirSelector: () => void
   onCerrarSelector: () => void
   onEnviado: () => void
-  onElegirTipo: (tipo: TipoEnvio) => void
-  onConfirmar: (tipo: TipoEnvio) => void
+  onEliminar: () => void
+  onConfirmarEnvio: () => void
+  onConfirmarEliminar: () => void
   onEditarPedido?: (dia: GrupoDia) => void
   onBorrarPedido?: (dia: GrupoDia) => void
   onVenta: () => void
@@ -1177,7 +1224,6 @@ function FilasTabla({
         <td className="px-4 py-2.5">
           <AccionesCanasta
             canasta={canasta}
-            acento={acento}
             selector={selector}
             ocupado={ocupado}
             enviando={enviando}
@@ -1185,8 +1231,9 @@ function FilasTabla({
             onAbrirSelector={onAbrirSelector}
             onCerrarSelector={onCerrarSelector}
             onEnviado={onEnviado}
-            onElegirTipo={onElegirTipo}
-            onConfirmar={onConfirmar}
+            onEliminar={onEliminar}
+            onConfirmarEnvio={onConfirmarEnvio}
+            onConfirmarEliminar={onConfirmarEliminar}
             onVenta={onVenta}
             onAbono={onAbono}
           />
@@ -1402,7 +1449,6 @@ function ListaPrendas({
 
 function AccionesCanasta({
   canasta,
-  acento,
   selector,
   ocupado,
   enviando,
@@ -1410,13 +1456,13 @@ function AccionesCanasta({
   onAbrirSelector,
   onCerrarSelector,
   onEnviado,
-  onElegirTipo,
-  onConfirmar,
+  onEliminar,
+  onConfirmarEnvio,
+  onConfirmarEliminar,
   onVenta,
   onAbono,
 }: {
   canasta: CanastaAbierta
-  acento: string
   selector: Selector | null
   ocupado: boolean
   enviando: boolean
@@ -1424,8 +1470,9 @@ function AccionesCanasta({
   onAbrirSelector: () => void
   onCerrarSelector: () => void
   onEnviado: () => void
-  onElegirTipo: (tipo: TipoEnvio) => void
-  onConfirmar: (tipo: TipoEnvio) => void
+  onEliminar: () => void
+  onConfirmarEnvio: () => void
+  onConfirmarEliminar: () => void
   onVenta: () => void
   onAbono: () => void
 }) {
@@ -1468,18 +1515,16 @@ function AccionesCanasta({
   const bodega = (
     <SelectorEnvio
       codigo={canasta.codigo}
-      acento={acento}
       compacto={compacto}
       abierto={selector !== null}
       paso={selector?.paso ?? 'menu'}
-      tipo={selector?.tipo ?? null}
       ocupado={bloqueado}
       enviando={enviando}
       onAbrir={onAbrirSelector}
-      onBodega={onCerrarSelector}
       onEnviado={onEnviado}
-      onElegirTipo={onElegirTipo}
-      onConfirmar={onConfirmar}
+      onEliminar={onEliminar}
+      onConfirmarEnvio={onConfirmarEnvio}
+      onConfirmarEliminar={onConfirmarEliminar}
       onCancelar={onCerrarSelector}
     />
   )
@@ -1677,33 +1722,29 @@ function Monto({ etiqueta, valor }: { etiqueta: string; valor: number }) {
 
 function SelectorEnvio({
   codigo,
-  acento,
   compacto = false,
   abierto,
   paso,
-  tipo,
   ocupado,
   enviando,
   onAbrir,
-  onBodega,
   onEnviado,
-  onElegirTipo,
-  onConfirmar,
+  onEliminar,
+  onConfirmarEnvio,
+  onConfirmarEliminar,
   onCancelar,
 }: {
   codigo: string
-  acento: string
   compacto?: boolean
   abierto: boolean
   paso: PasoSelector
-  tipo: TipoEnvio | null
   ocupado: boolean
   enviando: boolean
   onAbrir: () => void
-  onBodega: () => void
   onEnviado: () => void
-  onElegirTipo: (tipo: TipoEnvio) => void
-  onConfirmar: (tipo: TipoEnvio) => void
+  onEliminar: () => void
+  onConfirmarEnvio: () => void
+  onConfirmarEliminar: () => void
   onCancelar: () => void
 }) {
   const { enLinea } = useConexion()
@@ -1720,11 +1761,16 @@ function SelectorEnvio({
     width: number
     maxHeight: number
   } | null>(null)
-  const etiqueta = abierto && paso === 'tipo' ? 'Enviado' : 'Bodega'
-  const colorEstado = etiqueta === 'Enviado' ? 'bg-afirmar' : 'bg-fondo'
+  const etiqueta = 'Bodega'
+  const colorEstado = 'bg-fondo'
   const salto = reducirMovimiento === true
   const transicion = salto ? { duration: 0 } : transicionDesplegar
-  const etiquetaPanel = paso === 'tipo' ? `Tipo de envío de ${codigo}` : `Estado de ${codigo}`
+  const etiquetaPanel =
+    paso === 'confirmar-envio'
+      ? `Confirmar envío de ${codigo}`
+      : paso === 'confirmar-eliminar'
+        ? `Confirmar eliminación de ${codigo}`
+        : `Estado de ${codigo}`
 
   useEffect(() => {
     if (!abierto || !esPc) {
@@ -1737,7 +1783,7 @@ function SelectorEnvio({
       if (!boton) return
       const margen = 8
       const ancho = Math.max(boton.width, 176)
-      const altoEstimado = paso === 'tipo' ? 360 : 160
+      const altoEstimado = paso === 'menu' ? 160 : 240
       const espacioAbajo = window.innerHeight - boton.bottom - margen
       const espacioArriba = boton.top - margen
       const abrirArriba = espacioAbajo < Math.min(altoEstimado, 280) && espacioArriba > espacioAbajo
@@ -1802,40 +1848,49 @@ function SelectorEnvio({
     return () => boton?.focus()
   }, [abierto])
 
+  const confirmarClase =
+    'inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full bg-black px-4 py-3 text-center text-base text-white [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
+
   const opciones =
     paso === 'menu' ? (
       <>
-        <button type="button" aria-pressed onClick={onBodega} className={`${boton} bg-fondo`}>
-          Bodega
-        </button>
         <button type="button" onClick={onEnviado} className={`${boton} bg-afirmar`}>
           Enviado
+        </button>
+        <button type="button" onClick={onEliminar} className={`${boton} bg-borrar`}>
+          Eliminar
+        </button>
+      </>
+    ) : paso === 'confirmar-envio' ? (
+      <>
+        <p className="px-2 text-sm text-black/70">
+          La canasta de {codigo} se da por pagada y se registra el envío.
+        </p>
+        <button
+          type="button"
+          disabled={enviando || !enLinea}
+          onClick={onConfirmarEnvio}
+          className={confirmarClase}
+        >
+          {enviando ? 'Enviando…' : 'Confirmar'}
+        </button>
+        <button type="button" disabled={enviando} onClick={onCancelar} className={`${boton} bg-fondo`}>
+          Cancelar
         </button>
       </>
     ) : (
       <>
-        {TIPOS_ENVIO.map((opcion) => (
-          <button
-            key={opcion}
-            type="button"
-            aria-pressed={tipo === opcion}
-            disabled={enviando}
-            onClick={() => onElegirTipo(opcion)}
-            className={boton}
-            style={{ backgroundColor: tipo === opcion ? acento : '#F5F0E8', color: '#000' }}
-          >
-            {etiquetasTipo[opcion]}
-          </button>
-        ))}
+        <p className="px-2 text-sm text-black/70">
+          Se borran las prendas y los abonos de {codigo}. El saldo a favor queda en $0.00 y la clienta pasa a
+          inactiva. No se registra un envío.
+        </p>
         <button
           type="button"
-          disabled={enviando || tipo == null || !enLinea}
-          onClick={() => {
-            if (tipo) onConfirmar(tipo)
-          }}
-          className={`inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full bg-black px-4 py-3 text-center text-base text-white [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 ${enviando ? 'opacity-50' : ''}`}
+          disabled={enviando || !enLinea}
+          onClick={onConfirmarEliminar}
+          className={confirmarClase}
         >
-          {enviando ? 'Enviando…' : 'Confirmar'}
+          {enviando ? 'Eliminando…' : 'Confirmar'}
         </button>
         <button type="button" disabled={enviando} onClick={onCancelar} className={`${boton} bg-fondo`}>
           Cancelar
@@ -1901,7 +1956,11 @@ function SelectorEnvio({
               className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[min(88dvh,40rem)] w-full max-w-md flex-col gap-2 overflow-y-auto rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md"
             >
               <p id={tituloId} className="px-2 pb-1 text-sm text-black/60">
-                {paso === 'tipo' ? 'Tipo de envío' : 'Estado'}
+                {paso === 'confirmar-envio'
+                  ? 'Confirmar envío'
+                  : paso === 'confirmar-eliminar'
+                    ? 'Confirmar eliminación'
+                    : 'Estado'}
               </p>
               {opciones}
             </motion.div>

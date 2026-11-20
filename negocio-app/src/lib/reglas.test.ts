@@ -4,6 +4,7 @@ import {
   agruparPorPrecio,
   abonoTrasCerrarCanasta,
   calcularEnvio,
+  cierreAlEliminarCanasta,
   excedenteAbono,
   fechaDiaLocal,
   mensajeAbonoRegistrado,
@@ -49,6 +50,19 @@ describe('reglas de la canasta', () => {
 
   it('con abono 25 y total 20 deja saldo 0 y, al enviar, saldo 5 activo', () => {
     expect(saldoPendiente(20, 25)).toBe(0)
+    expect(calcularEnvio(20, 25)).toEqual({
+      nuevoSaldoFavor: 5,
+      nuevoEstado: 'activo',
+    })
+  })
+})
+
+describe('cierreAlEliminarCanasta', () => {
+  it('deja saldo 0 e inactiva, sin el sobrante que sí conserva un envío', () => {
+    expect(cierreAlEliminarCanasta()).toEqual({
+      nuevoSaldoFavor: 0,
+      nuevoEstado: 'inactivo',
+    })
     expect(calcularEnvio(20, 25)).toEqual({
       nuevoSaldoFavor: 5,
       nuevoEstado: 'activo',

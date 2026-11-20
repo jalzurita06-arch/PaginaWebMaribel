@@ -6,6 +6,7 @@ import {
   armarRegistroEnvio,
   envioEsAntiguo,
   esTipoEnvio,
+  TIPO_ENVIO_DIRECTO,
   fechaCorteEnvios,
   leerDetalleEnvio,
   mensajeEnvioConfirmado,
@@ -313,6 +314,10 @@ describe('mensajeEnvioConfirmado', () => {
 })
 
 describe('esTipoEnvio', () => {
+  it('el envío directo usa un tipo que la columna ya acepta', () => {
+    expect(esTipoEnvio(TIPO_ENVIO_DIRECTO)).toBe(true)
+  })
+
   it('acepta local, uber y servientrega', () => {
     expect(esTipoEnvio('local')).toBe(true)
     expect(esTipoEnvio('uber')).toBe(true)

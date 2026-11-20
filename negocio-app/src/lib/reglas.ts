@@ -50,6 +50,15 @@ export function saldoPendiente(total: number, saldoFavor: number): number {
  * Enviar da la canasta por pagada.
  * Si el abono no alcanza, el saldo a favor queda en 0.
  */
+/**
+ * Descartar la canasta no registra un envío.
+ * El saldo a favor queda en 0 para coincidir con el historial de abonos vacío,
+ * y el cliente queda inactivo.
+ */
+export function cierreAlEliminarCanasta(): ResultadoEnvio {
+  return { nuevoSaldoFavor: 0, nuevoEstado: 'inactivo' }
+}
+
 export function calcularEnvio(total: number, saldoFavor: number): ResultadoEnvio {
   const nuevoSaldoFavor =
     saldoFavor >= total ? redondear2(Math.max(0, saldoFavor - total)) : 0

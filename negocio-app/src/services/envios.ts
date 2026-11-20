@@ -3,6 +3,7 @@ import { formatearDolares, redondear2 } from '../lib/dinero.ts'
 import {
   abonoTrasCerrarCanasta,
   agruparPorDia,
+  cierreAlEliminarCanasta,
   agruparPorPrecio,
   calcularEnvio,
   fechaDiaLocal,
@@ -25,6 +26,15 @@ import {
 } from './clientes.ts'
 
 export const MENSAJE_CANASTA_VACIA = 'La canasta está vacía. No hay nada que enviar.'
+export const MENSAJE_CANASTA_VACIA_ELIMINAR = 'La canasta está vacía. No hay nada que eliminar.'
+export const MENSAJE_CANASTA_ELIMINADA = 'Canasta eliminada. La clienta queda inactiva.'
+
+/**
+ * La pantalla ya no pide Local, Uber ni Servientrega.
+ * `tipo_envio` sigue siendo obligatorio en la tabla, así que el envío directo guarda este valor.
+ * No cambia ningún cálculo.
+ */
+export const TIPO_ENVIO_DIRECTO: TipoEnvio = 'local'
 
 const MENSAJE_SIN_CONEXION = 'Sin conexión. Revisa tu internet e inténtalo de nuevo.'
 const MENSAJE_CONFIG = 'Faltan los datos de conexión. Revisa la configuración de la app.'
@@ -403,6 +413,91 @@ export async function registrarEnvio(
       if (!deshecho) return { ok: false, mensaje: MENSAJE_RECUPERAR }
     }
     return { ok: false, mensaje: mensajeErrorEnvio(error, 'registrar el envío') }
+  }
+}
+
+/**
+ * Quita la canasta abierta de una clienta sin crear un envío.
+ * Borra sus prendas y sus abonos, deja saldo_favor en 0 y el estado en inactivo.
+ */
+export async function eliminarCanastaSinEnvio(clienteId: string): Promise<Resultado<null>> {
+  const db = preparar()
+  if (esFallo(db)) return db
+  if (!esUuid(clienteId)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
+
+  const cierre = cierreAlEliminarCanasta()
+  let cliente: ClienteEnvio | null = null
+  let saldoCambiado = false
+  let canastaBorrada = false
+  let abonosBorrados = false
+
+  try {
+    const leido = await leerClienteYCanasta(db, clienteId)
+    if (!leido.ok) return leido
+    cliente = leido.datos
+
+    if (!cliente.items.some((item) => item.cantidad > 0)) {
+      return { ok: false, mensaje: MENSAJE_CANASTA_VACIA_ELIMINAR }
+    }
+
+    const { data: actualizado, error: errorSaldo } = await db
+      .from('clientes')
+      .update({
+        saldo_favor: cierre.nuevoSaldoFavor,
+        estado: cierre.nuevoEstado,
+      })
+      .eq('id', clienteId)
+      .eq('saldo_favor', cliente.saldoCrudo)
+      .eq('estado', cliente.estado)
+      .select('id')
+
+    if (errorSaldo || !actualizado?.length) {
+      return {
+        ok: false,
+        mensaje: errorSaldo ? mensajeErrorEnvio(errorSaldo, 'actualizar el saldo') : MENSAJE_CAMBIO,
+      }
+    }
+    saldoCambiado = true
+
+    const { data: borrados, error: errorBorrado } = await db
+      .from('canasta_items')
+      .delete()
+      .eq('cliente_id', clienteId)
+      .select('id')
+
+    if (errorBorrado || !borrados?.length) {
+      const deshecho = await deshacerEnvio(db, cliente, true, false, false)
+      if (!deshecho) return { ok: false, mensaje: MENSAJE_SALDO_SIN_ENVIO }
+      return {
+        ok: false,
+        mensaje: errorBorrado ? mensajeErrorEnvio(errorBorrado, 'vaciar la canasta') : MENSAJE_CAMBIO,
+      }
+    }
+    canastaBorrada = true
+
+    if (cliente.abonos.length > 0) {
+      const { error: errorAbonos } = await db.from('abonos').delete().eq('cliente_id', clienteId)
+      if (errorAbonos) {
+        const deshecho = await deshacerEnvio(db, cliente, true, true, false)
+        if (!deshecho) return { ok: false, mensaje: MENSAJE_RECUPERAR }
+        return { ok: false, mensaje: mensajeErrorEnvio(errorAbonos, 'borrar los abonos') }
+      }
+      abonosBorrados = true
+    }
+
+    return { ok: true, datos: null }
+  } catch (error) {
+    if (cliente && (saldoCambiado || canastaBorrada || abonosBorrados)) {
+      const deshecho = await deshacerEnvio(
+        db,
+        cliente,
+        saldoCambiado,
+        canastaBorrada,
+        abonosBorrados,
+      )
+      if (!deshecho) return { ok: false, mensaje: MENSAJE_RECUPERAR }
+    }
+    return { ok: false, mensaje: mensajeErrorEnvio(error, 'eliminar la canasta') }
   }
 }
 
