@@ -37,7 +37,7 @@ export type PanelEditarPedidoProps = {
 }
 
 const botonBase =
-  'inline-flex touch-manipulation items-center justify-center rounded-full text-center [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
+  'toque-activo inline-flex touch-manipulation items-center justify-center rounded-full text-center [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
 
 const boton = `${botonBase} min-h-12 w-full px-4 py-3 text-base`
 const toque = { scale: 0.97 }

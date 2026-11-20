@@ -30,6 +30,8 @@ import { subirAlInicio } from '../lib/dispositivo.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
+import { mensajeErrorDescarga } from '../lib/errores.ts'
+import { avisoPersistente } from '../lib/feedback.ts'
 import { canastaAbiertaDesdeEstado } from '../lib/navegacion.ts'
 import { armarReporteCanasta } from '../lib/reporteCanasta.ts'
 import { descargarReporteExcel } from '../lib/reporteCanastaExcel.ts'
@@ -67,7 +69,7 @@ type VistaCanasta = 'abiertas' | 'historial'
 type Selector = { clienteId: string; paso: PasoSelector }
 
 const botonBase =
-  'inline-flex touch-manipulation items-center justify-center rounded-full text-center [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
+  'toque-activo inline-flex touch-manipulation items-center justify-center rounded-full text-center [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
 
 const boton = `${botonBase} min-h-12 w-full px-4 py-3 text-base`
 
@@ -288,12 +290,8 @@ export function Canasta() {
   }, [cargando])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
-    if (tono === 'ok') {
-      setAviso(null)
-      avisar(texto)
-      return
-    }
-    setAviso({ texto, tono })
+    setAviso(avisoPersistente(texto, tono))
+    avisar(texto, tono)
     subirAlInicio()
   }
 
@@ -437,20 +435,25 @@ export function Canasta() {
   function descargarReporte(formato: 'pdf' | 'excel') {
     if (errorAbonos || ultimosAbonos == null) return
     const filas = armarReporteCanasta(ordenarCanastasAbiertas(canastas, orden), abonosPorCliente)
-    if (formato === 'excel') {
-      void descargarReporteExcel(filas).then(() => avisar('Excel descargado.'))
-      return
-    }
-    void descargarReporteCanastas(filas).then(() => avisar('PDF descargado.'))
+    const promesa = formato === 'excel' ? descargarReporteExcel(filas) : descargarReporteCanastas(filas)
+    void promesa
+      .then(() => mostrar(formato === 'excel' ? 'Excel descargado.' : 'PDF descargado.', 'ok'))
+      .catch(() => mostrar(mensajeErrorDescarga(formato), 'error'))
   }
 
   return (
     <Layout titulo={nombre} subtitulo={subtitulo} acento={acento} amplio>
-      {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
+      <AnimatePresence>
+        {aviso ? (
+          <Aviso key={aviso.texto} tono={aviso.tono}>
+            {aviso.texto}
+          </Aviso>
+        ) : null}
+      </AnimatePresence>
 
       {vista === 'abiertas' ? (
         <>
-          {cargando ? <IndicadorCarga>Cargando canastas…</IndicadorCarga> : null}
+          {cargando ? <IndicadorCarga variante="lista">Cargando canastas…</IndicadorCarga> : null}
 
           {!cargando && errorCanastas ? (
             <div className="flex flex-col gap-3">
@@ -536,6 +539,7 @@ export function Canasta() {
 
           {canastasVisibles.length > 0 && !esPc ? (
             <ul className="flex flex-col gap-3">
+              <AnimatePresence initial={false}>
               {canastasVisibles.map((canasta) => (
                 <FilaCanasta
                   key={canasta.clienteId}
@@ -569,6 +573,7 @@ export function Canasta() {
                   }}
                 />
               ))}
+              </AnimatePresence>
             </ul>
           ) : null}
         </>
@@ -964,10 +969,15 @@ function FilaCanasta({
   onAbono: () => void
 }) {
   const detalleId = useId()
+  const reducirMovimiento = useReducedMotion()
 
   return (
-    <li
+    <motion.li
+      layout
       id={`canasta-${canasta.clienteId}`}
+      initial={false}
+      exit={reducirMovimiento ? { opacity: 0 } : { opacity: 0, y: -10, scale: 0.98 }}
+      transition={{ duration: reducirMovimiento ? 0 : 0.2 }}
       className={`flex scroll-mt-4 flex-col rounded-3xl p-5 shadow-sm ${sinAbono ? 'bg-peligro' : 'bg-white'}`}
     >
       <div className="flex items-center gap-3">
@@ -1031,7 +1041,7 @@ function FilaCanasta({
           onAbono={onAbono}
         />
       </div>
-    </li>
+    </motion.li>
   )
 }
 
@@ -1111,7 +1121,7 @@ function TablaCanastas({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <AnimatePresence initial={false}>
             {canastas.map((canasta) => {
               const abierta = abiertaId === canasta.clienteId
               return (
@@ -1138,7 +1148,7 @@ function TablaCanastas({
                 />
               )
             })}
-          </tbody>
+          </AnimatePresence>
         </table>
       </div>
     </div>
@@ -1185,6 +1195,7 @@ function FilasTabla({
   onAbono: () => void
 }) {
   const detalleId = useId()
+  const reducirMovimiento = useReducedMotion()
 
   function alternarSiEsDato(evento: MouseEvent<HTMLTableRowElement>) {
     const destino = evento.target
@@ -1194,7 +1205,12 @@ function FilasTabla({
   }
 
   return (
-    <>
+    <motion.tbody
+      layout
+      initial={false}
+      exit={reducirMovimiento ? { opacity: 0 } : { opacity: 0 }}
+      transition={{ duration: reducirMovimiento ? 0 : 0.18 }}
+    >
       <tr
         id={`canasta-${canasta.clienteId}`}
         className={`scroll-mt-4 border-b border-black/10 align-middle ${sinAbono ? 'bg-peligro' : abierta ? 'bg-black/[0.03]' : 'hover:bg-black/[0.03]'}`}
@@ -1252,7 +1268,7 @@ function FilasTabla({
           />
         </div>
       </FilaTablaDesplegable>
-    </>
+    </motion.tbody>
   )
 }
 
@@ -2177,7 +2193,7 @@ function HistorialSemana({
         <BuscadorClientes valor={busqueda} onCambiar={onBusqueda} />
       ) : null}
 
-      {cargando ? <IndicadorCarga>Cargando historial…</IndicadorCarga> : null}
+      {cargando ? <IndicadorCarga variante="lista">Cargando historial…</IndicadorCarga> : null}
 
       {!cargando && error ? (
         <button type="button" onClick={onReintentar} className={`${boton} bg-black text-white`}>
@@ -2238,6 +2254,7 @@ function HistorialSemana({
 
       {envios.length > 0 && !esPc ? (
         <ul className="flex flex-col gap-3">
+          <AnimatePresence initial={false}>
           {envios.map((envio) => (
             <FilaHistorial
               key={envio.id}
@@ -2246,6 +2263,7 @@ function HistorialSemana({
               onAlternar={() => alternar(envio.id)}
             />
           ))}
+          </AnimatePresence>
         </ul>
       ) : null}
     </section>
@@ -2263,8 +2281,17 @@ function FilaHistorial({
 }) {
   const detalleId = useId()
 
+  const reducirMovimiento = useReducedMotion()
+
   return (
-    <li id={`envio-${envio.id}`} className="flex scroll-mt-4 flex-col rounded-3xl bg-white p-5 shadow-sm">
+    <motion.li
+      layout
+      id={`envio-${envio.id}`}
+      initial={false}
+      exit={reducirMovimiento ? { opacity: 0 } : { opacity: 0, y: -10 }}
+      transition={{ duration: reducirMovimiento ? 0 : 0.2 }}
+      className="flex scroll-mt-4 flex-col rounded-3xl bg-white p-5 shadow-sm"
+    >
       <button
         type="button"
         aria-expanded={abierta}
@@ -2290,7 +2317,7 @@ function FilaHistorial({
           <DetalleEnvio id={detalleId} grupos={envio.detalle} dias={envio.dias} />
         </div>
       </PanelDesplegable>
-    </li>
+    </motion.li>
   )
 }
 

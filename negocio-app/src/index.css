@@ -43,3 +43,58 @@ html.dispositivo-lento *::after {
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+.toque-activo {
+  transition:
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.toque-activo:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.toque-activo:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toque-activo:hover:not(:disabled),
+  .toque-activo:active:not(:disabled) {
+    filter: none;
+    transform: none;
+  }
+}
+
+html.dispositivo-lento .toque-activo:hover:not(:disabled),
+html.dispositivo-lento .toque-activo:active:not(:disabled) {
+  filter: none;
+  transform: none;
+}
+
+.esqueleto-brillo {
+  background: linear-gradient(90deg, rgb(0 0 0 / 0.07) 0%, rgb(0 0 0 / 0.13) 50%, rgb(0 0 0 / 0.07) 100%);
+  background-size: 200% 100%;
+  animation: esqueleto-deslizar 1.4s ease-in-out infinite;
+}
+
+@keyframes esqueleto-deslizar {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto-brillo {
+    animation: none;
+    background: rgb(0 0 0 / 0.1);
+  }
+}
+
+html.dispositivo-lento .esqueleto-brillo {
+  animation: none;
+  background: rgb(0 0 0 / 0.1);
+}

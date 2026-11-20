@@ -1,9 +1,12 @@
-/** Prefijo y valores de respaldo. El mensaje editable se guarda en plantilla_compartir. */
+/**
+ * Prefijo y etiquetas públicas. Cuenta y cédula no van en el bundle:
+ * se leen de plantilla_compartir con sesión. Vacío hasta entonces.
+ */
 export const negocio = {
   nombreTitular: 'Maribel Lozada Reyes',
   banco: 'Banco Pichincha',
   tipoCuenta: 'Cuenta de Ahorro',
-  numeroCuenta: '2201156975',
-  cedula: '1721965281',
+  numeroCuenta: '',
+  cedula: '',
   telefonoPrefijo: '593',
 }

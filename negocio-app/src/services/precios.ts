@@ -7,6 +7,7 @@ import {
   type DireccionOrden,
 } from '../lib/precios.ts'
 import { supabase } from '../lib/supabase.ts'
+import { LIMITE_PRECIOS } from './limites.ts'
 
 const MENSAJE_SIN_CONEXION = 'Sin conexión. Revisa tu internet e inténtalo de nuevo.'
 const MENSAJE_CONFIG = 'Faltan los datos de conexión. Revisa la configuración de la app.'
@@ -83,6 +84,7 @@ export async function listarPrecios(): Promise<ResultadoDatos<Precio[]>> {
       .select('id, valor, orden')
       .order('orden', { ascending: true })
       .order('valor', { ascending: true })
+      .limit(LIMITE_PRECIOS)
 
     if (error) return { ok: false, mensaje: mensajeErrorPrecio(error, 'No se pudieron cargar los valores.') }
     return { ok: true, datos: ordenar(((data ?? []) as FilaPrecio[]).map(aPrecio)) }

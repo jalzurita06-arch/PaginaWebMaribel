@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Aviso } from '../components/Aviso.tsx'
 import { BotonAccion } from '../components/BotonAccion.tsx'
 import { FormularioValor } from '../components/FormularioValor.tsx'
@@ -88,6 +89,7 @@ export function Catalogo() {
 
   function fallar(texto: string) {
     setMensaje({ tipo: 'error', texto })
+    avisar(texto, 'error')
   }
 
   async function agregar(valor: number) {
@@ -107,7 +109,8 @@ export function Catalogo() {
     if (!lista.ok) fallar('El valor se guardó, pero no se pudo actualizar la lista.')
     else {
       publicar(lista.datos)
-      avisar('Valor agregado.')
+      setMensaje({ tipo: 'exito', texto: 'Valor agregado.' })
+      avisar('Valor agregado.', 'ok')
       setAgregando(false)
     }
     setOcupado(false)
@@ -130,7 +133,8 @@ export function Catalogo() {
     if (!lista.ok) fallar('El valor se actualizó, pero no se pudo actualizar la lista.')
     else {
       publicar(lista.datos)
-      avisar('Valor actualizado.')
+      setMensaje({ tipo: 'exito', texto: 'Valor actualizado.' })
+      avisar('Valor actualizado.', 'ok')
       setEditandoId(null)
     }
     setOcupado(false)
@@ -153,7 +157,8 @@ export function Catalogo() {
     if (!lista.ok) fallar('El valor se eliminó, pero no se pudo actualizar la lista.')
     else {
       publicar(lista.datos)
-      avisar('Valor eliminado.')
+      setMensaje({ tipo: 'exito', texto: 'Valor eliminado.' })
+      avisar('Valor eliminado.', 'ok')
       setEliminandoId(null)
     }
     setOcupado(false)
@@ -176,7 +181,8 @@ export function Catalogo() {
     if (!lista.ok) fallar('El orden cambió, pero no se pudo actualizar la lista.')
     else {
       publicar(lista.datos)
-      avisar('Orden actualizado.')
+      setMensaje({ tipo: 'exito', texto: 'Orden actualizado.' })
+      avisar('Orden actualizado.', 'ok')
     }
     setOcupado(false)
   }
@@ -194,7 +200,8 @@ export function Catalogo() {
     if (!resultado.ok) fallar(resultado.mensaje)
     else {
       publicar(resultado.datos)
-      avisar('Valores de ejemplo creados.')
+      setMensaje({ tipo: 'exito', texto: 'Valores de ejemplo creados.' })
+      avisar('Valores de ejemplo creados.', 'ok')
     }
     setCreandoEjemplo(false)
     setOcupado(false)
@@ -205,9 +212,13 @@ export function Catalogo() {
   return (
     <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
       <section aria-busy={cargando || ocupado} className="flex flex-col gap-4">
-        {mensaje?.tipo === 'error' && !agregando && !editandoId && !eliminandoId ? (
-          <Aviso>{mensaje.texto}</Aviso>
-        ) : null}
+        <AnimatePresence>
+          {mensaje && !agregando && !editandoId && !eliminandoId ? (
+            <Aviso key={mensaje.texto} tono={mensaje.tipo === 'error' ? 'error' : 'ok'}>
+              {mensaje.texto}
+            </Aviso>
+          ) : null}
+        </AnimatePresence>
 
         {agregando ? (
           <div className="rounded-3xl bg-white p-5 shadow-sm lg:max-w-xl lg:p-8">
@@ -266,9 +277,14 @@ export function Catalogo() {
 
         {precios.length > 0 ? (
           <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4 xl:grid-cols-3">
+            <AnimatePresence initial={false}>
             {precios.map((precio, indice) => (
-              <li
+              <motion.li
+                layout
                 key={precio.id}
+                initial={false}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.18 }}
                 className={
                   editandoId === precio.id || eliminandoId === precio.id
                     ? 'lg:col-span-2 xl:col-span-3'
@@ -322,8 +338,9 @@ export function Catalogo() {
                     void mover(precio.id, 'bajar')
                   }}
                 />
-              </li>
+              </motion.li>
             ))}
+            </AnimatePresence>
           </ul>
         ) : null}
       </section>

@@ -83,6 +83,8 @@ export async function iniciarSesion(
     })
 
     if (error) return { ok: false, mensaje: mensajeErrorSesion(error) }
+    const validada = await revalidarSesion()
+    if (!validada) return { ok: false, mensaje: MENSAJE_SERVIDOR }
     return { ok: true }
   } catch (error) {
     return { ok: false, mensaje: mensajeErrorSesion(error) }
@@ -102,16 +104,69 @@ export async function cerrarSesion(): Promise<ResultadoSesion> {
   }
 }
 
-/** Avisa en cada cambio, incluida la sesión ya guardada al abrir la app. */
+/** Confía en getUser (el servidor), no solo en la sesión cacheada de getSession. */
+export function sesionSiUsuarioCoincide(
+  sesion: Session | null,
+  userId: string | undefined,
+): Session | null {
+  if (!sesion || !userId || sesion.user.id !== userId) return null
+  return sesion
+}
+
+export async function revalidarSesion(): Promise<Session | null> {
+  if (!supabase) return null
+
+  const { data: usuario, error } = await supabase.auth.getUser()
+  if (!error && usuario.user) {
+    const { data } = await supabase.auth.getSession()
+    return sesionSiUsuarioCoincide(data.session, usuario.user.id)
+  }
+
+  // Sin red no se puede confirmar el usuario; se conserva la sesión local.
+  if (error && esMensajeDeRed(error.message)) {
+    const { data } = await supabase.auth.getSession()
+    return data.session
+  }
+
+  return null
+}
+
+export async function exigirSesion(): Promise<ResultadoSesion> {
+  const sesion = await revalidarSesion()
+  if (!sesion) return { ok: false, mensaje: 'La sesión expiró. Vuelve a entrar.' }
+  return { ok: true }
+}
+
+/** Avisa en cada cambio. En carga e inicio, revalida con getUser. */
 export function escucharSesion(alCambiar: (sesion: Session | null) => void): () => void {
   if (!supabase) {
     alCambiar(null)
     return () => {}
   }
 
+  let serie = 0
   const {
     data: { subscription },
-  } = supabase.auth.onAuthStateChange((_evento, sesion) => {
+  } = supabase.auth.onAuthStateChange((evento, sesion) => {
+    const marca = ++serie
+    if (evento === 'SIGNED_OUT') {
+      alCambiar(null)
+      return
+    }
+
+    if (
+      evento === 'INITIAL_SESSION' ||
+      evento === 'SIGNED_IN' ||
+      evento === 'TOKEN_REFRESHED' ||
+      evento === 'USER_UPDATED'
+    ) {
+      void revalidarSesion().then((validada) => {
+        if (marca !== serie) return
+        alCambiar(validada)
+      })
+      return
+    }
+
     alCambiar(sesion)
   })
 

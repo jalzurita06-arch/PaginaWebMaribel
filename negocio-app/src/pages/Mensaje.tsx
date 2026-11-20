@@ -116,7 +116,9 @@ export function Mensaje() {
     }
     reemplazarCache(CLAVE_PLANTILLA, resultado.datos)
     setPlantilla(resultado.datos)
-    avisar(panel === 'imagen' ? 'Imagen guardada.' : 'Mensaje guardado.')
+    const textoOk = panel === 'imagen' ? 'Imagen guardada.' : 'Mensaje guardado.'
+    setMensaje({ tipo: 'exito', texto: textoOk })
+    avisar(textoOk, 'ok')
     setOcupado(false)
   }
 
@@ -132,7 +134,9 @@ export function Mensaje() {
   return (
     <Layout titulo={nombre} subtitulo={subtitulo} acento={acento}>
       <section className="flex flex-col gap-4 lg:gap-6">
-        {mensaje?.tipo === 'error' ? <Aviso>{mensaje.texto}</Aviso> : null}
+        {mensaje ? (
+          <Aviso tono={mensaje.tipo === 'error' ? 'error' : 'ok'}>{mensaje.texto}</Aviso>
+        ) : null}
 
         {cargando && !plantilla ? <IndicadorCarga>Cargando mensaje…</IndicadorCarga> : null}
 

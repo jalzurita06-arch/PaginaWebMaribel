@@ -29,6 +29,7 @@ import {
 import { coincideCliente } from '../lib/busqueda.ts'
 import { codificarVenta } from '../lib/compartir.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
+import { avisoPersistente } from '../lib/feedback.ts'
 import { subirAlInicio } from '../lib/dispositivo.ts'
 import { useDatos } from '../lib/useDatos.ts'
 import { formatearDolares, redondear2 } from '../lib/dinero.ts'
@@ -77,7 +78,7 @@ const numeros: Record<Paso, number> = {
 }
 
 const boton =
-  'inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full px-5 py-3 text-base [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
+  'toque-activo inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full px-5 py-3 text-base [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
 
 const toque = { scale: 0.97 }
 const Enlace = motion.create(Link)
@@ -208,12 +209,8 @@ export function Venta({
   }, [embebida, clienteInicialId])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
-    if (tono === 'ok') {
-      setAviso(null)
-      avisar(texto)
-      return
-    }
-    setAviso({ texto, tono })
+    setAviso(avisoPersistente(texto, tono))
+    avisar(texto, tono)
     if (!embebida) subirAlInicio()
   }
 
@@ -477,7 +474,13 @@ export function Venta({
 
   const flujo = (
     <>
-      {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
+      <AnimatePresence>
+        {aviso ? (
+          <Aviso key={aviso.texto} tono={aviso.tono}>
+            {aviso.texto}
+          </Aviso>
+        ) : null}
+      </AnimatePresence>
       {paso === 'buscar' && !restaurando && !confirmacion && bloqueo ? <Aviso>{bloqueo}</Aviso> : null}
       {restaurando ? <IndicadorCarga>Cargando el pedido…</IndicadorCarga> : null}
 
@@ -1464,12 +1467,20 @@ function ListaTemporal({
         </span>
       </div>
       <ul className="flex flex-col gap-3">
+        <AnimatePresence initial={false}>
         {lineas.map((linea) => {
           const subtotalLinea = totalCanasta([linea])
           const monto = formatearDolares(linea.precio)
           const editando = editandoId === linea.id
           return (
-            <li key={linea.id} className="flex items-center justify-between gap-3">
+            <motion.li
+              layout
+              key={linea.id}
+              initial={false}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+              className="flex items-center justify-between gap-3"
+            >
               <span className="min-w-0">
                 <span className="block">
                   {monto} × <NumeroAnimado valor={linea.cantidad} texto={String(linea.cantidad)} />
@@ -1488,7 +1499,7 @@ function ListaTemporal({
                       aria-label={`Menos una de ${monto}`}
                       disabled={linea.cantidad <= 1}
                       onClick={() => onCambiarCantidad(linea.id, -1)}
-                      className="inline-flex size-11 touch-manipulation items-center justify-center rounded-full bg-peligro focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-40"
+                      className="toque-activo inline-flex size-11 touch-manipulation items-center justify-center rounded-full bg-peligro focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-40"
                     >
                       <Minus aria-hidden size={18} strokeWidth={2} />
                     </button>
@@ -1497,7 +1508,7 @@ function ListaTemporal({
                       aria-label={`Más una de ${monto}`}
                       disabled={!Number.isSafeInteger(linea.cantidad + 1)}
                       onClick={() => onCambiarCantidad(linea.id, 1)}
-                      className="inline-flex size-11 touch-manipulation items-center justify-center rounded-full bg-afirmar focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-40"
+                      className="toque-activo inline-flex size-11 touch-manipulation items-center justify-center rounded-full bg-afirmar focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-40"
                     >
                       <Plus aria-hidden size={18} strokeWidth={2} />
                     </button>
@@ -1506,7 +1517,7 @@ function ListaTemporal({
                   <button
                     type="button"
                     onClick={() => setEditandoId(linea.id)}
-                    className="inline-flex min-h-11 touch-manipulation items-center rounded-full bg-black/5 px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                    className="toque-activo inline-flex min-h-11 touch-manipulation items-center rounded-full bg-black/5 px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
                   >
                     Cantidad
                   </button>
@@ -1515,14 +1526,15 @@ function ListaTemporal({
                   type="button"
                   onClick={() => onQuitar(linea.id)}
                   aria-label={`Quitar ${monto}, cantidad ${linea.cantidad}`}
-                  className="inline-flex min-h-11 touch-manipulation items-center rounded-full bg-borrar px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  className="toque-activo inline-flex min-h-11 touch-manipulation items-center rounded-full bg-borrar px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
                 >
                   Quitar
                 </button>
               </div>
-            </li>
+            </motion.li>
           )
         })}
+        </AnimatePresence>
       </ul>
       <p className="flex items-baseline justify-between gap-3">
         <span>Total de la venta</span>
