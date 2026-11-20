@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
+import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ArrowLeft, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
 import { CampanaAbono } from '../components/CampanaAbono.tsx'
@@ -1850,6 +1850,25 @@ function SelectorEnvio({
 
   const confirmarClase =
     'inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full bg-black px-4 py-3 text-center text-base text-white [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
+  const esConfirmacion = paso !== 'menu'
+  const tituloPaso =
+    paso === 'confirmar-envio'
+      ? 'Confirmar envío'
+      : paso === 'confirmar-eliminar'
+        ? 'Confirmar eliminación'
+        : 'Estado'
+
+  const botonVolver = esConfirmacion ? (
+    <button
+      type="button"
+      aria-label="Volver"
+      disabled={enviando}
+      onClick={onAbrir}
+      className="inline-flex size-8 shrink-0 touch-manipulation items-center justify-center rounded-full bg-black/5 [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50"
+    >
+      <ArrowLeft aria-hidden size={16} strokeWidth={2} />
+    </button>
+  ) : null
 
   const opciones =
     paso === 'menu' ? (
@@ -1921,6 +1940,7 @@ function SelectorEnvio({
               maxHeight: caja.maxHeight,
             }}
           >
+            {esConfirmacion ? <div className="flex items-center px-0.5">{botonVolver}</div> : null}
             {opciones}
           </motion.div>
         ) : (
@@ -1955,13 +1975,12 @@ function SelectorEnvio({
               transition={transicion}
               className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[min(88dvh,40rem)] w-full max-w-md flex-col gap-2 overflow-y-auto rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md"
             >
-              <p id={tituloId} className="px-2 pb-1 text-sm text-black/60">
-                {paso === 'confirmar-envio'
-                  ? 'Confirmar envío'
-                  : paso === 'confirmar-eliminar'
-                    ? 'Confirmar eliminación'
-                    : 'Estado'}
-              </p>
+              <div className="flex items-center gap-2 px-1 pb-1">
+                {botonVolver}
+                <p id={tituloId} className="min-w-0 flex-1 text-sm text-black/60">
+                  {tituloPaso}
+                </p>
+              </div>
               {opciones}
             </motion.div>
           </motion.div>
