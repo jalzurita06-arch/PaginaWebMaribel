@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { VistaAnimada } from '../components/PanelDesplegable.tsx'
 import { Pencil, Trash2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -16,6 +16,7 @@ import { abonoAtrasado } from '../lib/abonoAtrasado.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
 import { CLAVE_FECHAS_ABONO, CLAVE_RESUMEN_ABONOS, claveDetalleAbono, leerCache, reemplazarCache } from '../lib/cacheLectura.ts'
 import { subirAlInicio } from '../lib/dispositivo.ts'
+import { avisoPersistente } from '../lib/feedback.ts'
 import { useDatos } from '../lib/useDatos.ts'
 import { estadoCanastaAbierta, vieneDeCanasta } from '../lib/navegacion.ts'
 import { formatearDolares } from '../lib/dinero.ts'
@@ -42,7 +43,7 @@ type ModoFormulario =
 type AvisoEstado = { texto: string; tono: 'ok' | 'error' }
 
 const boton =
-  'inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full px-5 py-3 text-base [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
+  'toque-activo inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full px-5 py-3 text-base [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
 
 const toque = { scale: 0.97 }
 const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -170,12 +171,8 @@ export function Abonos({
   }
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
-    if (tono === 'ok') {
-      setAviso(null)
-      avisar(texto)
-      return
-    }
-    setAviso({ texto, tono })
+    setAviso(avisoPersistente(texto, tono))
+    avisar(texto, tono)
     if (!embebida) subirAlInicio()
   }
 
@@ -334,7 +331,13 @@ export function Abonos({
 
   const flujo = (
     <>
-      {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
+      <AnimatePresence>
+        {aviso ? (
+          <Aviso key={aviso.texto} tono={aviso.tono}>
+            {aviso.texto}
+          </Aviso>
+        ) : null}
+      </AnimatePresence>
 
       <VistaAnimada vistaKey={claveVista}>
       {formularioAbierto && cliente && modoVisible ? (

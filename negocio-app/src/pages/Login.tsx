@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type FormEvent } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Navigate } from 'react-router-dom'
 import { Layout } from '../components/Layout.tsx'
 import { acentoLogin } from '../config/secciones.ts'
@@ -6,11 +7,13 @@ import { useConexion } from '../context/useConexion.ts'
 import { useSesion } from '../context/useSesion.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
 import { validarLogin, type ErroresLogin } from '../lib/login.ts'
+import { claseToque, toque, transicionToque } from '../lib/movimiento.ts'
 import { iniciarSesion, supabaseConfigurado } from '../services/sesion.ts'
 
 export function Login() {
   const { sesion, cargando } = useSesion()
   const { enLinea } = useConexion()
+  const reducirMovimiento = useReducedMotion()
   const idCorreo = useId()
   const idContrasena = useId()
   const idErrorCorreo = useId()
@@ -127,13 +130,15 @@ export function Login() {
           </p>
         ) : null}
 
-        <button
+        <motion.button
           type="submit"
           disabled={enviando || !supabaseConfigurado() || !enLinea}
-          className="rounded-full bg-black px-5 py-4 text-base text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 lg:col-span-2 lg:w-fit lg:px-10"
+          whileTap={reducirMovimiento || enviando ? undefined : toque}
+          transition={transicionToque}
+          className={`rounded-full bg-black px-5 py-4 text-base text-white lg:col-span-2 lg:w-fit lg:px-10 ${claseToque}`}
         >
           {enviando ? 'Entrando…' : 'Entrar'}
-        </button>
+        </motion.button>
       </form>
     </Layout>
   )

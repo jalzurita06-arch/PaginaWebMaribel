@@ -23,6 +23,7 @@ import { CLAVE_PLANTILLA, claveCanastaCliente, leerCache, pedirDatos } from '../
 import { PLANTILLA_INICIAL } from '../lib/plantilla.ts'
 import { useDatos } from '../lib/useDatos.ts'
 import { formatearDolares } from '../lib/dinero.ts'
+import { MENSAJE_IMAGEN_PEDIDO, mensajeErrorHumano } from '../lib/errores.ts'
 import { generarImagen, prepararArchivoCompartir } from '../lib/generarImagen.tsx'
 import type { ItemCanasta } from '../lib/reglas.ts'
 import { obtenerCanasta } from '../services/canasta.ts'
@@ -30,7 +31,7 @@ import { obtenerCliente, type Cliente } from '../services/clientes.ts'
 import { obtenerPlantilla } from '../services/plantilla.ts'
 
 const boton =
-  'inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full px-5 py-3 text-base [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
+  'toque-activo inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-full px-5 py-3 text-base [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
 
 const toque = { scale: 0.97 }
 const Enlace = motion.create(Link)
@@ -51,12 +52,8 @@ export function Compartir() {
   const [aviso, setAvisoEstado] = useState<AvisoEstado | null>(null)
 
   function setAviso(aviso: AvisoEstado | null) {
-    if (aviso?.tono === 'ok') {
-      setAvisoEstado(null)
-      avisar(aviso.texto)
-      return
-    }
     setAvisoEstado(aviso)
+    if (aviso) avisar(aviso.texto, aviso.tono)
   }
   const [ocupado, setOcupado] = useState(false)
   const [imagenLista, setImagenLista] = useState<Blob | null>(null)
@@ -494,6 +491,5 @@ function descargarBlob(blob: Blob, nombre: string): boolean {
 }
 
 function mensajeDe(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message
-  return 'No se pudo crear la imagen del pedido.'
+  return mensajeErrorHumano(error, MENSAJE_IMAGEN_PEDIDO)
 }

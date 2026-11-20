@@ -16,6 +16,8 @@ import {
   totalPrendas,
 } from '../lib/reglas.ts'
 import { supabase } from '../lib/supabase.ts'
+import { LIMITE_ABONOS, LIMITE_CLIENTES, LIMITE_CODIGOS, LIMITE_ITEMS_CANASTA } from './limites.ts'
+import { exigirSesion } from './sesion.ts'
 
 export type EstadoCliente = 'activo' | 'inactivo'
 
@@ -180,6 +182,7 @@ async function cargarClientesConItems(): Promise<Resultado<ClienteConItems[]>> {
       .from('clientes')
       .select(`${COLUMNAS}, canasta_items(precio, cantidad, created_at)`)
       .order('codigo', { ascending: true })
+      .limit(LIMITE_CLIENTES)
     if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los clientes') }
     const clientes = leerClientesConItems(data)
     if (!clientes) return { ok: false, mensaje: 'No se pudo leer la lista de clientes.' }
@@ -347,6 +350,8 @@ export async function cambiarEstadoCliente(
 
 export async function eliminarCliente(id: string): Promise<Resultado<null>> {
   if (!esUuid(id)) return { ok: false, mensaje: MENSAJE_NO_ENCONTRADO }
+  const sesion = await exigirSesion()
+  if (!sesion.ok) return sesion
   const db = preparar()
   if (esFallo(db)) return db
 
@@ -451,6 +456,7 @@ export async function listarAbonos(clienteId: string): Promise<Resultado<Abono[]
       .select('id, fecha, monto')
       .eq('cliente_id', clienteId)
       .order('fecha', { ascending: false })
+      .limit(LIMITE_ABONOS)
     if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
 
     const abonos = leerAbonos(data)
@@ -510,7 +516,10 @@ async function cargarTodosLosAbonos(): Promise<Resultado<FilasAbonoTodas>> {
   if (esFallo(db)) return db
 
   try {
-    const { data, error } = await db.from('abonos').select('id, cliente_id, fecha, monto')
+    const { data, error } = await db
+      .from('abonos')
+      .select('id, cliente_id, fecha, monto')
+      .limit(LIMITE_ABONOS)
     if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'cargar los abonos') }
     const filas = leerAbonosConCliente(data)
     if (!filas) return { ok: false, mensaje: 'No se pudo leer la lista de abonos.' }
@@ -712,6 +721,7 @@ export async function listarCanastaCliente(clienteId: string): Promise<Resultado
       .from('canasta_items')
       .select('id, precio, cantidad')
       .eq('cliente_id', clienteId)
+      .limit(LIMITE_ITEMS_CANASTA)
     if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'revisar la canasta') }
 
     const prendas = leerPrendas(data)
@@ -783,6 +793,7 @@ async function codigoOcupado(
     .from('clientes')
     .select('id, codigo')
     .ilike('codigo', escaparIlike(codigo))
+    .limit(LIMITE_CODIGOS)
 
   if (error) return { ok: false, mensaje: mensajeErrorCliente(error, 'revisar el código') }
 

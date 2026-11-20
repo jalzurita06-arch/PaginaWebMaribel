@@ -3,6 +3,7 @@ import { redondear2 } from '../lib/dinero.ts'
 import { agruparPorPrecio, fechaDiaLocal, puedeVender, type ItemCanasta } from '../lib/reglas.ts'
 import { supabase } from '../lib/supabase.ts'
 import { obtenerCliente, type Resultado } from './clientes.ts'
+import { LIMITE_ITEMS_CANASTA } from './limites.ts'
 
 export type FilaCanasta = ItemCanasta & { id: string }
 
@@ -82,6 +83,7 @@ export async function obtenerCanasta(clienteId: string): Promise<Resultado<FilaC
       .from('canasta_items')
       .select('id, precio, cantidad')
       .eq('cliente_id', clienteId)
+      .limit(LIMITE_ITEMS_CANASTA)
 
     if (error) return { ok: false, mensaje: mensajeErrorCanasta(error, 'cargar la canasta') }
     const filas = leerFilas(data)
@@ -136,8 +138,6 @@ export async function editarPedidoFecha(
   fecha: string,
   itemsNuevos: ItemCanasta[],
 ): Promise<Resultado<ItemCanasta[]>> {
-  const db = preparar()
-  if (esFallo(db)) return db
   if (!clienteId.trim()) return { ok: false, mensaje: 'No se encontró el cliente.' }
 
   const fechaLimpia = fecha.trim()
@@ -151,6 +151,9 @@ export async function editarPedidoFecha(
       : { ok: true as const, datos: [] as ItemCanasta[] }
   if (!preparados.ok) return preparados
 
+  const db = preparar()
+  if (esFallo(db)) return db
+
   const agrupados = agruparPorPrecio(preparados.datos)
 
   try {
@@ -162,6 +165,7 @@ export async function editarPedidoFecha(
       .from('canasta_items')
       .select('id, precio, cantidad, created_at')
       .eq('cliente_id', clienteId)
+      .limit(LIMITE_ITEMS_CANASTA)
 
     if (error) return { ok: false, mensaje: mensajeErrorCanasta(error, 'cargar el pedido') }
 

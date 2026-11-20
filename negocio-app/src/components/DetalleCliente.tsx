@@ -20,7 +20,7 @@ type Props = {
 }
 
 const boton =
-  'min-h-12 w-full touch-manipulation rounded-full px-5 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
+  'toque-activo min-h-12 w-full touch-manipulation rounded-full px-5 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50'
 
 export function DetalleCliente({
   cliente,

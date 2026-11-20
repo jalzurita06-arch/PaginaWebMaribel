@@ -15,25 +15,35 @@ import {
   SALUDO_INICIAL,
   textoWhatsApp,
 } from './plantilla.ts'
+import { plantillaDePrueba } from './plantillaPrueba.ts'
+
+const plantillaPrueba = plantillaDePrueba()
 
 const mensajePorDefecto = `¡Hola! Ana-A1 🌷💕
 Le hago llegar el detalle de su pedido y el valor pendiente por cancelar. Muchas gracias por su comprita. 🥰
 ━━━━━━━━━━━━
-🏦 *Banco Pichincha*
-👩‍💼 Maribel Lozada Reyes
+🏦 *Banco Ejemplo*
+👩‍💼 Titular de Prueba
 💳 Cuenta de Ahorro
-🔢 2201156975
-Cédula : 1721965281`
+🔢 0001112223
+Cédula : 0102030405`
 
 describe('plantilla del mensaje', () => {
+  it('no usa cuenta ni cédula reales en los datos de prueba', () => {
+    expect(plantillaPrueba.numeroCuenta).toBe('0001112223')
+    expect(plantillaPrueba.cedula).toBe('0102030405')
+    expect(JSON.stringify(plantillaPrueba)).not.toContain('2201156975')
+    expect(JSON.stringify(plantillaPrueba)).not.toContain('1721965281')
+  })
+
   it('arma el mensaje con el orden y los textos iniciales', () => {
-    expect(textoWhatsApp({ nombre: 'Ana', codigo: 'a1' }, PLANTILLA_INICIAL)).toBe(mensajePorDefecto)
+    expect(textoWhatsApp({ nombre: 'Ana', codigo: 'a1' }, plantillaPrueba)).toBe(mensajePorDefecto)
   })
 
   it('usa el saludo sin nombre cuando no hay nombre', () => {
-    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, PLANTILLA_INICIAL)).toContain('¡Hola! B2 🌷💕')
-    expect(textoWhatsApp({ nombre: '   ', codigo: 'B2' }, PLANTILLA_INICIAL)).toContain('¡Hola! B2 🌷💕')
-    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, PLANTILLA_INICIAL)).not.toContain('¡Hola! -')
+    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, plantillaPrueba)).toContain('¡Hola! B2 🌷💕')
+    expect(textoWhatsApp({ nombre: '   ', codigo: 'B2' }, plantillaPrueba)).toContain('¡Hola! B2 🌷💕')
+    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, plantillaPrueba)).not.toContain('¡Hola! -')
   })
 
   it('cambia {nombre} y {codigo} en el texto', () => {
@@ -41,12 +51,12 @@ describe('plantilla del mensaje', () => {
   })
 
   it('lee y arma el saludo con pastillas', () => {
-    expect(leerSaludo(PLANTILLA_INICIAL.saludoConNombre)).toEqual(SALUDO_INICIAL)
+    expect(leerSaludo(plantillaPrueba.saludoConNombre)).toEqual(SALUDO_INICIAL)
     expect(armarSaludo({ ...SALUDO_INICIAL, piezas: ['codigo', 'nombre'] })).toBe('¡Hola! {codigo}-{nombre} 🌷💕')
   })
 
   it('omite un bloque oculto y respeta el orden', () => {
-    const plantilla = copiarPlantilla(PLANTILLA_INICIAL)
+    const plantilla = copiarPlantilla(plantillaPrueba)
     const idCuerpo = idBloqueMensaje({ tipo: 'fijo', clave: 'cuerpo', visible: true })
     const idCuenta = idBloqueMensaje({ tipo: 'cuenta', id: 'principal', visible: true })
     plantilla.bloquesMensaje = alternarBloqueMensaje(plantilla.bloquesMensaje, idCuerpo)
@@ -54,8 +64,8 @@ describe('plantilla del mensaje', () => {
     plantilla.bloquesMensaje = reordenar(plantilla.bloquesMensaje, indiceCuenta, 1)
     const texto = textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, plantilla)
     expect(texto).not.toContain('Le hago llegar')
-    expect(texto.indexOf('Banco Pichincha')).toBeGreaterThan(-1)
-    expect(texto.indexOf('Banco Pichincha')).toBeLessThan(texto.indexOf('━━━━'))
+    expect(texto.indexOf('Banco Ejemplo')).toBeGreaterThan(-1)
+    expect(texto.indexOf('Banco Ejemplo')).toBeLessThan(texto.indexOf('━━━━'))
   })
 
   it('completa bloques que faltan y descarta claves raras', () => {
@@ -84,8 +94,9 @@ describe('plantilla del mensaje', () => {
   })
 
   it('pide los datos bancarios solo si se van a mostrar', () => {
-    expect(datosBancariosListos(PLANTILLA_INICIAL)).toBe(true)
-    const incompleta = copiarPlantilla(PLANTILLA_INICIAL)
+    expect(datosBancariosListos(PLANTILLA_INICIAL)).toBe(false)
+    expect(datosBancariosListos(plantillaPrueba)).toBe(true)
+    const incompleta = copiarPlantilla(plantillaPrueba)
     const primera = incompleta.cuentas[0]
     if (primera) primera.cedula = '  '
     expect(datosBancariosListos(incompleta)).toBe(false)
@@ -94,7 +105,7 @@ describe('plantilla del mensaje', () => {
   })
 
   it('pone dos cuentas en el mensaje', () => {
-    const plantilla = copiarPlantilla(PLANTILLA_INICIAL)
+    const plantilla = copiarPlantilla(plantillaPrueba)
     plantilla.cuentas.push({
       id: 'otra',
       banco: 'Banco Guayaquil',
@@ -105,7 +116,7 @@ describe('plantilla del mensaje', () => {
     })
     const lista = alineadaConCuentas(plantilla)
     const texto = textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, lista)
-    expect(texto).toContain('Banco Pichincha')
+    expect(texto).toContain('Banco Ejemplo')
     expect(texto).toContain('Banco Guayaquil')
   })
 })

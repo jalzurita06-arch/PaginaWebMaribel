@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { destinoVolver, estadoCanastaAbierta, vieneDeCanasta } from '../lib/navegacion.ts'
@@ -94,7 +94,7 @@ export function Layout({ titulo, subtitulo, acento: _acento, onAtras, amplio = f
             </p>
           </div>
         </header>
-        {mensaje ? <Aviso>{mensaje}</Aviso> : null}
+        <AnimatePresence>{mensaje ? <Aviso key={mensaje}>{mensaje}</Aviso> : null}</AnimatePresence>
         {children}
       </div>
     </main>

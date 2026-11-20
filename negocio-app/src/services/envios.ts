@@ -23,6 +23,8 @@ import {
   type EstadoCliente,
   type Resultado,
 } from './clientes.ts'
+import { LIMITE_ENVIOS } from './limites.ts'
+import { exigirSesion } from './sesion.ts'
 
 export const MENSAJE_CANASTA_VACIA = 'La canasta está vacía. No hay nada que enviar.'
 
@@ -274,6 +276,8 @@ export async function registrarEnvio(
   clienteId: string,
   tipo: TipoEnvio,
 ): Promise<Resultado<EnvioRegistrado>> {
+  const sesion = await exigirSesion()
+  if (!sesion.ok) return sesion
   const db = preparar()
   if (esFallo(db)) return db
   if (!esTipoEnvio(tipo)) return { ok: false, mensaje: 'Elige Local, Uber o Servientrega.' }
@@ -419,6 +423,7 @@ export async function listarEnviosSemana(): Promise<Resultado<EnvioSemana[]>> {
       .select('id, fecha, codigo_cliente, tipo_envio, total, total_prendas, detalle')
       .gte('fecha', corte)
       .order('fecha', { ascending: false })
+      .limit(LIMITE_ENVIOS)
 
     if (error) return { ok: false, mensaje: mensajeErrorEnvio(error, 'cargar el historial') }
     const envios = leerEnvios(data)

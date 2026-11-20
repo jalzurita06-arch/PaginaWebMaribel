@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { PanelDesplegable, VistaAnimada } from '../components/PanelDesplegable.tsx'
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { Aviso } from '../components/Aviso.tsx'
@@ -19,6 +19,7 @@ import { useConexion } from '../context/useConexion.ts'
 import { CLAVE_CLIENTES, reemplazarCache } from '../lib/cacheLectura.ts'
 import { coincideCliente } from '../lib/busqueda.ts'
 import { MENSAJE_FALLO_RED } from '../lib/conexion.ts'
+import { avisoPersistente } from '../lib/feedback.ts'
 import { subirAlInicio } from '../lib/dispositivo.ts'
 import { useDatos } from '../lib/useDatos.ts'
 import type { DatosEdicionCliente, DatosNuevoCliente } from '../lib/clienteFormulario.ts'
@@ -139,12 +140,8 @@ export function Clientes() {
   }, [lista.error])
 
   function mostrar(texto: string, tono: AvisoEstado['tono']) {
-    if (tono === 'ok') {
-      setAviso(null)
-      avisar(texto)
-      return
-    }
-    setAviso({ texto, tono })
+    setAviso(avisoPersistente(texto, tono))
+    avisar(texto, tono)
     subirAlInicio()
   }
 
@@ -345,7 +342,13 @@ export function Clientes() {
       acento={acento}
       onAtras={vista.nombre !== 'lista' ? volverAtras : undefined}
     >
-      {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
+      <AnimatePresence>
+        {aviso ? (
+          <Aviso key={aviso.texto} tono={aviso.tono}>
+            {aviso.texto}
+          </Aviso>
+        ) : null}
+      </AnimatePresence>
 
       <VistaAnimada vistaKey={vista.nombre === 'confirmar' ? 'detalle' : vista.nombre}>
       {vista.nombre === 'lista' ? (
@@ -374,7 +377,7 @@ export function Clientes() {
             </div>
           </form>
 
-          {cargandoLista ? <IndicadorCarga>Cargando clientes…</IndicadorCarga> : null}
+          {cargandoLista ? <IndicadorCarga variante="lista">Cargando clientes…</IndicadorCarga> : null}
 
           {aviso?.tono === 'error' && clientes.length === 0 ? (
             <button

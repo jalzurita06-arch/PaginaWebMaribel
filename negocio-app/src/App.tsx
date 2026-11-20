@@ -22,6 +22,7 @@ import { Compartir } from './pages/Compartir.tsx'
 import { Inicio } from './pages/Inicio.tsx'
 import { Login } from './pages/Login.tsx'
 import { Mensaje } from './pages/Mensaje.tsx'
+import { NoEncontrada } from './pages/NoEncontrada.tsx'
 import { Venta } from './pages/Venta.tsx'
 
 const transicionPagina = { duration: 0.16, ease: [0.22, 1, 0.36, 1] } as const
@@ -57,6 +58,7 @@ function Rutas() {
           <Route path="/abonos" element={<Abonos />} />
           <Route path="/mensaje" element={<Mensaje />} />
         </Route>
+        <Route path="*" element={<NoEncontrada />} />
       </Routes>
     </motion.div>
   )

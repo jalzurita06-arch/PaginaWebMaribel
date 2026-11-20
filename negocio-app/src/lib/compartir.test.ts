@@ -13,16 +13,19 @@ import {
   textoWhatsApp,
   urlWhatsApp,
 } from './compartir.ts'
-import { copiarPlantilla, PLANTILLA_INICIAL } from './plantilla.ts'
+import { copiarPlantilla } from './plantilla.ts'
+import { plantillaDePrueba } from './plantillaPrueba.ts'
+
+const plantillaPrueba = plantillaDePrueba()
 
 const mensajeConNombre = `¡Hola! Ana-A1 🌷💕
 Le hago llegar el detalle de su pedido y el valor pendiente por cancelar. Muchas gracias por su comprita. 🥰
 ━━━━━━━━━━━━
-🏦 *Banco Pichincha*
-👩‍💼 Maribel Lozada Reyes
+🏦 *Banco Ejemplo*
+👩‍💼 Titular de Prueba
 💳 Cuenta de Ahorro
-🔢 2201156975
-Cédula : 1721965281`
+🔢 0001112223
+Cédula : 0102030405`
 
 describe('teléfono para WhatsApp', () => {
   it('quita el 0 inicial y antepone 593', () => {
@@ -46,24 +49,24 @@ describe('teléfono para WhatsApp', () => {
 
 describe('texto de WhatsApp', () => {
   it('arma el mensaje con nombre, código y datos del negocio', () => {
-    expect(textoWhatsApp({ nombre: 'Ana', codigo: 'a1' }, PLANTILLA_INICIAL)).toBe(mensajeConNombre)
+    expect(textoWhatsApp({ nombre: 'Ana', codigo: 'a1' }, plantillaPrueba)).toBe(mensajeConNombre)
   })
 
   it('usa solo el código cuando no hay nombre', () => {
-    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, PLANTILLA_INICIAL)).toContain('¡Hola! B2 🌷💕')
-    expect(textoWhatsApp({ nombre: '   ', codigo: 'B2' }, PLANTILLA_INICIAL)).toContain('¡Hola! B2 🌷💕')
-    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, PLANTILLA_INICIAL)).not.toContain('¡Hola! -')
+    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, plantillaPrueba)).toContain('¡Hola! B2 🌷💕')
+    expect(textoWhatsApp({ nombre: '   ', codigo: 'B2' }, plantillaPrueba)).toContain('¡Hola! B2 🌷💕')
+    expect(textoWhatsApp({ nombre: null, codigo: 'B2' }, plantillaPrueba)).not.toContain('¡Hola! -')
   })
 
   it('toma el banco desde los datos, no un texto fijo', () => {
-    const otra = copiarPlantilla(PLANTILLA_INICIAL)
+    const otra = copiarPlantilla(plantillaPrueba)
     if (otra.cuentas[0]) otra.cuentas[0].banco = 'Otro banco'
     expect(textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, otra)).toContain('🏦 *Otro banco*')
   })
 
   it('exige los cinco datos bancarios', () => {
-    expect(datosBancariosListos(PLANTILLA_INICIAL)).toBe(true)
-    const incompleta = copiarPlantilla(PLANTILLA_INICIAL)
+    expect(datosBancariosListos(plantillaPrueba)).toBe(true)
+    const incompleta = copiarPlantilla(plantillaPrueba)
     if (incompleta.cuentas[0]) incompleta.cuentas[0].cedula = '  '
     expect(datosBancariosListos(incompleta)).toBe(false)
   })
@@ -79,7 +82,7 @@ describe('enlaces y archivo', () => {
   })
 
   it('deja los emojis del mensaje en UTF-8 dentro del enlace', () => {
-    const url = urlWhatsApp('web', '59399', textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, PLANTILLA_INICIAL))
+    const url = urlWhatsApp('web', '59399', textoWhatsApp({ nombre: 'Ana', codigo: 'A1' }, plantillaPrueba))
     expect(url).toContain(encodeURIComponent('¡Hola!'))
     expect(url).toContain(encodeURIComponent('🌷💕'))
     expect(url).toContain(encodeURIComponent('🥰'))

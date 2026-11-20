@@ -1,18 +1,20 @@
-import { useReducedMotion } from 'framer-motion'
+import { EsqueletoLista, EsqueletoPastilla, EsqueletoTarjeta } from './Esqueleto.tsx'
 
-export function IndicadorCarga({ children }: { children: string }) {
-  const reducirMovimiento = useReducedMotion()
+type VarianteCarga = 'tarjeta' | 'lista' | 'linea'
 
+export function IndicadorCarga({
+  children,
+  variante = 'tarjeta',
+}: {
+  children: string
+  variante?: VarianteCarga
+}) {
   return (
-    <div
-      role="status"
-      className="flex w-fit items-center gap-3 rounded-full bg-black/5 px-5 py-3 text-sm"
-    >
-      <span
-        aria-hidden="true"
-        className={`size-2.5 shrink-0 rounded-full bg-black ${reducirMovimiento ? '' : 'animate-pulse'}`}
-      />
-      {children}
+    <div role="status" aria-busy="true" aria-label={children} className="flex flex-col gap-3">
+      <p className="sr-only">{children}</p>
+      {variante === 'lista' ? <EsqueletoLista /> : null}
+      {variante === 'tarjeta' ? <EsqueletoTarjeta /> : null}
+      {variante === 'linea' ? <EsqueletoPastilla /> : null}
     </div>
   )
 }

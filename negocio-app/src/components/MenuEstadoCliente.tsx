@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
+import { toque, transicionToque } from '../lib/movimiento.ts'
 import type { EstadoCliente } from '../services/clientes.ts'
 import { EtiquetaEstado } from './EtiquetaEstado.tsx'
 import { transicionDesplegar } from './PanelDesplegable.tsx'
@@ -38,7 +39,7 @@ export function BotonEtiquetaEstado({
       aria-controls={panelId}
       aria-label={`Estado de ${codigo}`}
       onClick={onClick}
-      className={`${anchoCompleto ? 'w-full' : 'inline-flex'} rounded-full ${foco}`}
+      className={`toque-activo ${anchoCompleto ? 'w-full' : 'inline-flex'} rounded-full ${foco}`}
     >
       {guardando ? (
         <span
@@ -70,33 +71,45 @@ export function OpcionesEstadoCliente({
   onElegirEstado: (estado: EstadoCliente) => void
   onBloquear: () => void
 }) {
+  const reducirMovimiento = useReducedMotion()
   const clase = compacto
-    ? `min-h-11 rounded-full px-5 text-sm ${foco}`
-    : `min-h-12 rounded-full px-5 text-base ${foco}`
+    ? `toque-activo min-h-11 rounded-full px-5 text-sm ${foco}`
+    : `toque-activo min-h-12 rounded-full px-5 text-base ${foco}`
 
   return (
     <div id={id} role="group" aria-label={`Elige el estado de ${codigo}`} className="flex flex-col gap-2">
-      <button
+      <motion.button
         type="button"
         disabled={!enLinea}
         aria-pressed={estado === 'activo'}
         onClick={() => onElegirEstado('activo')}
+        whileTap={reducirMovimiento || !enLinea ? undefined : toque}
+        transition={transicionToque}
         className={`${clase} bg-afirmar`}
       >
         Activo
-      </button>
-      <button
+      </motion.button>
+      <motion.button
         type="button"
         disabled={!enLinea}
         aria-pressed={estado === 'inactivo'}
         onClick={() => onElegirEstado('inactivo')}
+        whileTap={reducirMovimiento || !enLinea ? undefined : toque}
+        transition={transicionToque}
         className={`${clase} bg-peligro`}
       >
         Inactivo
-      </button>
-      <button type="button" disabled={!enLinea} onClick={onBloquear} className={`${clase} bg-borrar`}>
+      </motion.button>
+      <motion.button
+        type="button"
+        disabled={!enLinea}
+        onClick={onBloquear}
+        whileTap={reducirMovimiento || !enLinea ? undefined : toque}
+        transition={transicionToque}
+        className={`${clase} bg-borrar`}
+      >
         Bloqueado
-      </button>
+      </motion.button>
     </div>
   )
 }

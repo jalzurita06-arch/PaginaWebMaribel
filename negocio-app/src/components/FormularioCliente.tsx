@@ -246,7 +246,7 @@ export function FormularioCliente({
         <button
           type="submit"
           disabled={guardando || !enLinea}
-          className="rounded-full px-5 py-4 text-base text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 lg:w-fit lg:px-10"
+          className="toque-activo rounded-full px-5 py-4 text-base text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-50 lg:w-fit lg:px-10"
           style={{ backgroundColor: acento }}
         >
           {guardando ? 'Guardando…' : 'Guardar'}
