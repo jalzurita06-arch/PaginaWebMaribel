@@ -38,7 +38,8 @@ Si hay skills instaladas para este proyecto, léelas antes de escribir código y
 5. Abono: suma dinero a saldo_favor y se registra en la tabla abonos con fecha. El dinero abonado NUNCA se devuelve.
 6. Total de la canasta = suma de (precio × cantidad) de sus canasta_items.
 7. Saldo que se muestra = máximo entre 0 y (total − saldo_favor).
-8. Enviar (estado Enviado + tipo Local, Uber o Servientrega):
+8. Enviar (opción Enviado del botón Bodega, con confirmación):
+   - Ya no se elige subcategoría (Local, Uber o Servientrega).
    - La canasta se da por pagada completa, aunque el abono registrado no alcance.
    - Si saldo_favor >= total: nuevo saldo_favor = saldo_favor − total.
    - Si saldo_favor < total: nuevo saldo_favor = 0.
@@ -47,13 +48,20 @@ Si hay skills instaladas para este proyecto, léelas antes de escribir código y
    - Se borran todos los abonos anteriores del cliente.
    - Si queda saldo a favor, se registra un abono normal con ese monto y la fecha del envío. No lleva etiqueta especial.
    - Se crea un registro en envios con: fecha, código del cliente, tipo de envío, total de prendas, total y detalle (lista de precio, cantidad y subtotal).
-   - El tipo de envío solo sirve para saber por dónde salió. No cambia ningún cálculo.
+   - La columna tipo_envio no cambió. El envío directo guarda `local` para cumplirla. No cambia ningún cálculo. Los envíos viejos siguen mostrando Local, Uber o Servientrega.
    - Enviar una canasta vacía no hace nada y muestra un aviso.
 9. Historial de envíos: se conservan solo los últimos 7 días. Al abrir la pantalla Canasta se borran los envíos con más de 7 días. El historial muestra la lista de envíos y, arriba, el total generado y el total de prendas de esa semana.
 10. Eliminar cliente: borra el cliente y todo lo ligado a él (canasta, abonos y envíos). Si tiene canasta activa, primero muestra su detalle y pide confirmar.
 11. "Bloqueado" del brief no es un estado: significa eliminar. En la app solo existen activo e inactivo.
 12. Compartir (imagen o texto): no cambia ningún dato. Al compartir la canasta completa, muestra sus prendas agrupadas por precio, el abono (saldo_favor actual), el saldo pendiente (regla 7) y el total. Al compartir solo la venta actual, muestra únicamente las prendas compradas en esa venta y la suma de esas prendas, con el total etiquetado "Total de esta canasta". Las cantidades se identifican como "Cant. prendas" en toda la interfaz y los documentos compartidos.
-13. El estado "Bodega" no se guarda en la base de datos. Significa que la canasta todavía no se ha enviado.
+13. El estado "Bodega" no se guarda en la base de datos. Significa que la canasta todavía no se ha enviado. Su menú solo ofrece Enviado y Eliminar.
+14. Eliminar (opción Eliminar del botón Bodega, con confirmación), solo para esa clienta:
+   - Se borran sus canasta_items.
+   - Se borran todos sus abonos.
+   - saldo_favor queda en 0, para que coincida con un historial de abonos vacío. No es una devolución de dinero.
+   - Estado del cliente: inactivo.
+   - No se crea un registro en envios.
+   - Una canasta vacía no hace nada y muestra un aviso.
 
 ## Modelo de datos (ya creado en Supabase)
 Tablas: clientes, precios, canasta_items, abonos, envios. Todas tienen RLS y solo permiten usuarios autenticados. No cambies el esquema sin preguntarme.
