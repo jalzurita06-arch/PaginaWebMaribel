@@ -42,6 +42,8 @@ describe('armarHojaExcel', () => {
         ['ANA', 'Ana Pérez', 8, '18 nov 2026', 40, 15, 25],
         ['BEL', '', 2, '12 oct 2026', 10, 0, 10],
       ],
+      totales: { prendas: 10, total: 50, abonado: 15, saldo: 35 },
+      filaTotales: ['Totales', '', 10, '', 50, 15, 35],
     })
   })
 })
@@ -60,5 +62,12 @@ describe('armarLibroExcel', () => {
     expect(hoja?.getRow(3).getCell(1).fill).not.toMatchObject({
       fgColor: { argb: 'FFF3C1C1' },
     })
+    expect(hoja?.getCell('C1').value).toMatchObject({
+      richText: [{ text: 'Prendas ' }, { text: '10' }],
+    })
+    expect(hoja?.getRow(5).getCell(1).value).toBe('Totales')
+    expect(hoja?.getRow(5).getCell(3).value).toBe(10)
+    expect(hoja?.getRow(5).getCell(5).value).toBe(50)
+    expect(hoja?.getRow(5).font).toMatchObject({ bold: true })
   })
 })

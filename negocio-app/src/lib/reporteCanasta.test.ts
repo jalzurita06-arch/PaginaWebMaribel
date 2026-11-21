@@ -3,6 +3,7 @@ import {
   armarReporteCanasta,
   textoFechaReporte,
   textoPeriodoReporte,
+  totalesReporteCanasta,
   type CanastaParaReporte,
 } from './reporteCanasta.ts'
 
@@ -109,5 +110,59 @@ describe('armarReporteCanasta', () => {
   it('respeta el orden de las canastas', () => {
     const filas = armarReporteCanasta([bel, ana], { a: [{ monto: 1 }] })
     expect(filas.map((fila) => fila.codigo)).toEqual(['BEL', 'ANA'])
+  })
+})
+
+describe('totalesReporteCanasta', () => {
+  it('suma prendas y montos de las clientas incluidas', () => {
+    const filas = armarReporteCanasta([ana, bel], { a: [{ monto: 15 }] })
+    expect(totalesReporteCanasta(filas)).toEqual({
+      prendas: 10,
+      total: 50,
+      abonado: 15,
+      saldo: 35,
+    })
+  })
+
+  it('con rango solo suma las clientas que entran en el reporte', () => {
+    const filas = armarReporteCanasta([ana, bel], { a: [{ monto: 15 }] }, {
+      desde: '2026-11-01',
+      hasta: '2026-11-20',
+    })
+    expect(totalesReporteCanasta(filas)).toEqual({
+      prendas: 3,
+      total: 15,
+      abonado: 15,
+      saldo: 25,
+    })
+  })
+
+  it('redondea los montos a dos decimales', () => {
+    expect(
+      totalesReporteCanasta([
+        {
+          codigo: 'A',
+          nombre: null,
+          prendas: 1,
+          ultimaCompra: '',
+          total: 10.105,
+          abonado: 1.005,
+          saldo: 9.1,
+          montos: [],
+          sinAbonos: true,
+        },
+        {
+          codigo: 'B',
+          nombre: null,
+          prendas: 1,
+          ultimaCompra: '',
+          total: 10.105,
+          abonado: 1.005,
+          saldo: 9.1,
+          montos: [],
+          sinAbonos: true,
+        },
+      ]),
+    ).toEqual({ prendas: 2, total: 20.22, abonado: 2.02, saldo: 18.2 })
   })
 })

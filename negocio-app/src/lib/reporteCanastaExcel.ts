@@ -1,6 +1,11 @@
 import type ExcelJS from 'exceljs'
-import { redondear2 } from './dinero.ts'
-import { COLUMNAS_REPORTE_CANASTA, type FilaReporteCanasta } from './reporteCanasta.ts'
+import { formatearDolares, redondear2 } from './dinero.ts'
+import {
+  COLUMNAS_REPORTE_CANASTA,
+  totalesReporteCanasta,
+  type FilaReporteCanasta,
+  type TotalesReporteCanasta,
+} from './reporteCanasta.ts'
 
 const COLOR_PELIGRO = 'FFF3C1C1'
 
@@ -8,10 +13,13 @@ export type HojaReporteCanasta = {
   periodo: string
   encabezados: string[]
   filas: (string | number)[][]
+  totales: TotalesReporteCanasta
+  filaTotales: (string | number)[]
 }
 
 /** Hoja compacta: periodo arriba y luego código, nombre, prendas, última compra y montos. */
 export function armarHojaExcel(filas: FilaReporteCanasta[], periodo: string): HojaReporteCanasta {
+  const totales = totalesReporteCanasta(filas)
   return {
     periodo,
     encabezados: [...COLUMNAS_REPORTE_CANASTA],
@@ -24,6 +32,8 @@ export function armarHojaExcel(filas: FilaReporteCanasta[], periodo: string): Ho
       redondear2(fila.abonado),
       redondear2(fila.saldo),
     ]),
+    totales,
+    filaTotales: ['Totales', '', totales.prendas, '', totales.total, totales.abonado, totales.saldo],
   }
 }
 
@@ -54,6 +64,7 @@ export async function armarLibroExcel(
 
   hoja.getCell('A1').value = datos.periodo
   hoja.getCell('A1').font = { italic: true, size: 11, color: { argb: 'FF787878' } }
+  ponerTotalesCabecera(hoja, datos.totales)
 
   hoja.addTable({
     name: 'TablaCanastas',
@@ -91,6 +102,36 @@ export async function armarLibroExcel(
     }
   })
 
+  const filaTotales = hoja.getRow(filas.length + 3)
+  datos.filaTotales.forEach((valor, indice) => {
+    filaTotales.getCell(indice + 1).value = valor
+  })
+  filaTotales.font = { bold: true }
+  filaTotales.getCell(1).border = { top: { style: 'thin', color: { argb: 'FF909090' } } }
+  filaTotales.getCell(3).border = { top: { style: 'thin', color: { argb: 'FF909090' } } }
+  for (let col = 5; col <= 7; col++) {
+    const celda = filaTotales.getCell(col)
+    celda.numFmt = '"$"#,##0.00'
+    celda.border = { top: { style: 'thin', color: { argb: 'FF909090' } } }
+  }
+
   hoja.views = [{ state: 'frozen', ySplit: 2 }]
   return libro
+}
+
+function ponerTotalesCabecera(hoja: ExcelJS.Worksheet, totales: TotalesReporteCanasta) {
+  const celdas: [string, string, string][] = [
+    ['C1', 'Prendas', String(totales.prendas)],
+    ['E1', 'Total', formatearDolares(totales.total)],
+    ['F1', 'Abonado', formatearDolares(totales.abonado)],
+    ['G1', 'Saldo', formatearDolares(totales.saldo)],
+  ]
+  for (const [celda, etiqueta, valor] of celdas) {
+    hoja.getCell(celda).value = {
+      richText: [
+        { font: { italic: true, size: 9, color: { argb: 'FF787878' } }, text: `${etiqueta} ` },
+        { font: { bold: true, size: 9, color: { argb: 'FF000000' } }, text: valor },
+      ],
+    }
+  }
 }

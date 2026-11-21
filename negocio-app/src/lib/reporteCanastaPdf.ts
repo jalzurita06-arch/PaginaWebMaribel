@@ -1,5 +1,10 @@
 import { formatearDolares } from './dinero.ts'
-import { COLUMNAS_REPORTE_CANASTA, type FilaReporteCanasta } from './reporteCanasta.ts'
+import {
+  COLUMNAS_REPORTE_CANASTA,
+  totalesReporteCanasta,
+  type FilaReporteCanasta,
+  type TotalesReporteCanasta,
+} from './reporteCanasta.ts'
 
 const COLOR_ALERTA = { r: 193, g: 20, b: 46 }
 const MARGEN = 14
@@ -31,17 +36,19 @@ export async function descargarReporteCanastas(filas: FilaReporteCanasta[], peri
     MARGEN + COL_CODIGO + colNombre + COL_PRENDAS + COL_FECHA + COL_CIFRA * 2,
   ]
   let y = MARGEN
+  const totales = totalesReporteCanasta(filas)
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
   doc.setTextColor(0, 0, 0)
   doc.text('Canastas abiertas', MARGEN, y)
+  const yResumen = dibujarResumenTotales(doc, totales, ancho - MARGEN, y)
   y += 6
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
   doc.setTextColor(120, 120, 120)
   doc.text(periodo, MARGEN, y)
-  y += 8
+  y = Math.max(y + 8, yResumen + 5)
   y = dibujarEncabezado(doc, y, xCifras, colNombre, GState)
 
   for (const fila of filas) {
@@ -57,6 +64,13 @@ export async function descargarReporteCanastas(filas: FilaReporteCanasta[], peri
     dibujarLineaFila(doc, y + 3.2 + extraNombre, anchoUtil, GState)
     y += altoFila
   }
+
+  if (y > MARGEN + 10 && y + ALTO_FILA > limite) {
+    doc.addPage()
+    y = MARGEN
+    y = dibujarEncabezado(doc, y, xCifras, colNombre, GState)
+  }
+  dibujarFilaTotales(doc, totales, y, xCifras, anchoUtil, GState)
 
   doc.save('canastas-abiertas.pdf')
 }
@@ -82,6 +96,53 @@ function dibujarEncabezado(
   dibujarLineaFila(doc, y, COL_CODIGO + colNombre + COL_PRENDAS + COL_FECHA + COL_CIFRA * 3, Estado)
   doc.setTextColor(0, 0, 0)
   return y + 4.2
+}
+
+function dibujarResumenTotales(
+  doc: Documento,
+  totales: TotalesReporteCanasta,
+  xDerecha: number,
+  y: number,
+): number {
+  const lineas: [string, string][] = [
+    ['Prendas', String(totales.prendas)],
+    ['Total', formatearDolares(totales.total)],
+    ['Abonado', formatearDolares(totales.abonado)],
+    ['Saldo', formatearDolares(totales.saldo)],
+  ]
+  const alto = 4
+  lineas.forEach(([etiqueta, valor], indice) => {
+    const yy = y + indice * alto
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(0, 0, 0)
+    doc.text(valor, xDerecha, yy, { align: 'right' })
+    const anchoValor = doc.getTextWidth(valor)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(120, 120, 120)
+    doc.text(`${etiqueta}  `, xDerecha - anchoValor, yy, { align: 'right' })
+  })
+  return y + (lineas.length - 1) * alto
+}
+
+function dibujarFilaTotales(
+  doc: Documento,
+  totales: TotalesReporteCanasta,
+  y: number,
+  xCifras: number[],
+  anchoUtil: number,
+  Estado: ClaseEstado,
+) {
+  dibujarLineaFila(doc, y - 3.2, anchoUtil, Estado)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(0, 0, 0)
+  doc.text('Totales', MARGEN, y)
+  doc.setFontSize(10)
+  doc.text(String(totales.prendas), xCifras[0]! + COL_PRENDAS, y, { align: 'right' })
+  doc.text(formatearDolares(totales.total), xCifras[2]! + COL_CIFRA, y, { align: 'right' })
+  doc.text(formatearDolares(totales.abonado), xCifras[3]! + COL_CIFRA, y, { align: 'right' })
+  doc.text(formatearDolares(totales.saldo), xCifras[4]! + COL_CIFRA, y, { align: 'right' })
 }
 
 function dibujarFila(

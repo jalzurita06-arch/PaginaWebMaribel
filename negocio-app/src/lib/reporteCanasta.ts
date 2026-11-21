@@ -29,6 +29,13 @@ export type FilaReporteCanasta = {
   sinAbonos: boolean
 }
 
+export type TotalesReporteCanasta = {
+  prendas: number
+  total: number
+  abonado: number
+  saldo: number
+}
+
 export const COLUMNAS_REPORTE_CANASTA = [
   'Código',
   'Nombre',
@@ -95,4 +102,14 @@ export function armarReporteCanasta(
       },
     ]
   })
+}
+
+/** Suma prendas y montos de las filas ya filtradas por el periodo del reporte. */
+export function totalesReporteCanasta(filas: FilaReporteCanasta[]): TotalesReporteCanasta {
+  return {
+    prendas: filas.reduce((suma, fila) => suma + fila.prendas, 0),
+    total: redondear2(filas.reduce((suma, fila) => suma + redondear2(fila.total), 0)),
+    abonado: redondear2(filas.reduce((suma, fila) => suma + redondear2(fila.abonado), 0)),
+    saldo: redondear2(filas.reduce((suma, fila) => suma + redondear2(fila.saldo), 0)),
+  }
 }
