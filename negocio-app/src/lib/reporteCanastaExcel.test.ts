@@ -4,6 +4,8 @@ import { armarHojaExcel, armarLibroExcel } from './reporteCanastaExcel.ts'
 const ana = {
   codigo: 'ANA',
   nombre: 'Ana Pérez',
+  prendas: 8,
+  ultimaCompra: '18 nov 2026',
   total: 40,
   abonado: 15,
   saldo: 25,
@@ -14,6 +16,8 @@ const ana = {
 const bel = {
   codigo: 'BEL',
   nombre: null,
+  prendas: 2,
+  ultimaCompra: '12 oct 2026',
   total: 10,
   abonado: 0,
   saldo: 10,
@@ -22,28 +26,38 @@ const bel = {
 }
 
 describe('armarHojaExcel', () => {
-  it('deja solo código, nombre y totales, sin historial de abonos', () => {
-    expect(armarHojaExcel([ana, bel])).toEqual({
-      encabezados: ['Código', 'Nombre', 'Total', 'Abonado', 'Saldo'],
+  it('pone el periodo y las columnas con última compra', () => {
+    expect(armarHojaExcel([ana, bel], '1 nov 2026 – 20 nov 2026')).toEqual({
+      periodo: '1 nov 2026 – 20 nov 2026',
+      encabezados: [
+        'Código',
+        'Nombre',
+        'Prendas totales',
+        'Última compra',
+        'Total',
+        'Abonado',
+        'Saldo',
+      ],
       filas: [
-        ['ANA', 'Ana Pérez', 40, 15, 25],
-        ['BEL', '', 10, 0, 10],
+        ['ANA', 'Ana Pérez', 8, '18 nov 2026', 40, 15, 25],
+        ['BEL', '', 2, '12 oct 2026', 10, 0, 10],
       ],
     })
   })
 })
 
 describe('armarLibroExcel', () => {
-  it('crea una tabla con filtro y pinta de rojo a quien no tiene abonos', async () => {
-    const libro = await armarLibroExcel([ana, bel])
+  it('deja el periodo arriba de la tabla y pinta de rojo a quien no tiene abonos', async () => {
+    const libro = await armarLibroExcel([ana, bel], 'Toda la canasta')
     const hoja = libro.worksheets[0]
+    expect(hoja?.getCell('A1').value).toBe('Toda la canasta')
     expect(hoja?.getTable('TablaCanastas')).toBeTruthy()
-    expect(hoja?.getRow(3).getCell(1).fill).toMatchObject({
+    expect(hoja?.getRow(4).getCell(1).fill).toMatchObject({
       type: 'pattern',
       pattern: 'solid',
       fgColor: { argb: 'FFF3C1C1' },
     })
-    expect(hoja?.getRow(2).getCell(1).fill).not.toMatchObject({
+    expect(hoja?.getRow(3).getCell(1).fill).not.toMatchObject({
       fgColor: { argb: 'FFF3C1C1' },
     })
   })

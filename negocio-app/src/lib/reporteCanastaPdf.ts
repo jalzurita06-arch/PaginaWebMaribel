@@ -1,30 +1,34 @@
 import { formatearDolares } from './dinero.ts'
-import type { FilaReporteCanasta } from './reporteCanasta.ts'
+import { COLUMNAS_REPORTE_CANASTA, type FilaReporteCanasta } from './reporteCanasta.ts'
 
 const COLOR_ALERTA = { r: 193, g: 20, b: 46 }
 const MARGEN = 14
 const CAMPANA = 4.6
 const ALTO_FILA = 7
 const ALTO_NOMBRE = 4.2
-const COL_CODIGO = 28
-const COL_CIFRA = 28
+const COL_CODIGO = 22
+const COL_PRENDAS = 20
+const COL_FECHA = 24
+const COL_CIFRA = 22
 const OPACIDAD_LINEA = 0.28
 
 type Documento = import('jspdf').jsPDF
 type ClaseEstado = typeof import('jspdf').GState
 
-export async function descargarReporteCanastas(filas: FilaReporteCanasta[]) {
+export async function descargarReporteCanastas(filas: FilaReporteCanasta[], periodo: string) {
   const { jsPDF, GState } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'letter' })
   const ancho = doc.internal.pageSize.getWidth()
   const alto = doc.internal.pageSize.getHeight()
   const limite = alto - MARGEN
   const anchoUtil = ancho - MARGEN * 2
-  const colNombre = anchoUtil - COL_CODIGO - COL_CIFRA * 3
+  const colNombre = anchoUtil - COL_CODIGO - COL_PRENDAS - COL_FECHA - COL_CIFRA * 3
   const xCifras = [
     MARGEN + COL_CODIGO + colNombre,
-    MARGEN + COL_CODIGO + colNombre + COL_CIFRA,
-    MARGEN + COL_CODIGO + colNombre + COL_CIFRA * 2,
+    MARGEN + COL_CODIGO + colNombre + COL_PRENDAS,
+    MARGEN + COL_CODIGO + colNombre + COL_PRENDAS + COL_FECHA,
+    MARGEN + COL_CODIGO + colNombre + COL_PRENDAS + COL_FECHA + COL_CIFRA,
+    MARGEN + COL_CODIGO + colNombre + COL_PRENDAS + COL_FECHA + COL_CIFRA * 2,
   ]
   let y = MARGEN
 
@@ -32,6 +36,11 @@ export async function descargarReporteCanastas(filas: FilaReporteCanasta[]) {
   doc.setFontSize(14)
   doc.setTextColor(0, 0, 0)
   doc.text('Canastas abiertas', MARGEN, y)
+  y += 6
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(120, 120, 120)
+  doc.text(periodo, MARGEN, y)
   y += 8
   y = dibujarEncabezado(doc, y, xCifras, colNombre, GState)
 
@@ -62,18 +71,26 @@ function dibujarEncabezado(
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(8)
   doc.setTextColor(80, 80, 80)
-  doc.text('Código', MARGEN, y)
-  doc.text('Nombre', MARGEN + COL_CODIGO, y)
-  doc.text('Total', xCifras[0]! + COL_CIFRA, y, { align: 'right' })
-  doc.text('Abonado', xCifras[1]! + COL_CIFRA, y, { align: 'right' })
-  doc.text('Saldo', xCifras[2]! + COL_CIFRA, y, { align: 'right' })
+  doc.text(COLUMNAS_REPORTE_CANASTA[0], MARGEN, y)
+  doc.text(COLUMNAS_REPORTE_CANASTA[1], MARGEN + COL_CODIGO, y)
+  doc.text(COLUMNAS_REPORTE_CANASTA[2], xCifras[0]! + COL_PRENDAS, y, { align: 'right' })
+  doc.text(COLUMNAS_REPORTE_CANASTA[3], xCifras[1]! + COL_FECHA, y, { align: 'right' })
+  doc.text(COLUMNAS_REPORTE_CANASTA[4], xCifras[2]! + COL_CIFRA, y, { align: 'right' })
+  doc.text(COLUMNAS_REPORTE_CANASTA[5], xCifras[3]! + COL_CIFRA, y, { align: 'right' })
+  doc.text(COLUMNAS_REPORTE_CANASTA[6], xCifras[4]! + COL_CIFRA, y, { align: 'right' })
   y += 2.2
-  dibujarLineaFila(doc, y, COL_CODIGO + colNombre + COL_CIFRA * 3, Estado)
+  dibujarLineaFila(doc, y, COL_CODIGO + colNombre + COL_PRENDAS + COL_FECHA + COL_CIFRA * 3, Estado)
   doc.setTextColor(0, 0, 0)
   return y + 4.2
 }
 
-function dibujarFila(doc: Documento, fila: FilaReporteCanasta, y: number, xCifras: number[], lineasNombre: string[]) {
+function dibujarFila(
+  doc: Documento,
+  fila: FilaReporteCanasta,
+  y: number,
+  xCifras: number[],
+  lineasNombre: string[],
+) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
   const codigo = fila.codigo.toUpperCase()
@@ -96,9 +113,13 @@ function dibujarFila(doc: Documento, fila: FilaReporteCanasta, y: number, xCifra
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  doc.text(formatearDolares(fila.total), xCifras[0]! + COL_CIFRA, y, { align: 'right' })
-  doc.text(formatearDolares(fila.abonado), xCifras[1]! + COL_CIFRA, y, { align: 'right' })
-  doc.text(formatearDolares(fila.saldo), xCifras[2]! + COL_CIFRA, y, { align: 'right' })
+  doc.text(String(fila.prendas), xCifras[0]! + COL_PRENDAS, y, { align: 'right' })
+  doc.setFont('helvetica', 'normal')
+  doc.text(fila.ultimaCompra, xCifras[1]! + COL_FECHA, y, { align: 'right' })
+  doc.setFont('helvetica', 'bold')
+  doc.text(formatearDolares(fila.total), xCifras[2]! + COL_CIFRA, y, { align: 'right' })
+  doc.text(formatearDolares(fila.abonado), xCifras[3]! + COL_CIFRA, y, { align: 'right' })
+  doc.text(formatearDolares(fila.saldo), xCifras[4]! + COL_CIFRA, y, { align: 'right' })
 }
 
 function dibujarLineaFila(doc: Documento, y: number, anchoUtil: number, Estado: ClaseEstado) {

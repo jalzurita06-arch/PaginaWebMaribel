@@ -314,6 +314,32 @@ describe('ordenarCanastasAbiertas', () => {
   it('ordena por quien debe menos y desempata por código', () => {
     expect(ordenarCanastasAbiertas(filas, 'saldoMenor').map((fila) => fila.codigo)).toEqual(['M', 'Z', 'A'])
   })
+
+  it('ordena por la última compra, de más reciente a más antigua', () => {
+    const conFechas = [
+      { codigo: 'Z', saldo: 1, dias: [{ fecha: '2026-11-01' }] },
+      { codigo: 'A', saldo: 1, dias: [{ fecha: '2026-11-18' }, { fecha: '2026-10-01' }] },
+      { codigo: 'M', saldo: 1, dias: [{ fecha: '2026-11-18' }] },
+    ]
+    expect(ordenarCanastasAbiertas(conFechas, 'fechaReciente').map((fila) => fila.codigo)).toEqual([
+      'A',
+      'M',
+      'Z',
+    ])
+  })
+
+  it('ordena por la última compra, de más antigua a más reciente', () => {
+    const conFechas = [
+      { codigo: 'Z', saldo: 1, dias: [{ fecha: '2026-11-01' }] },
+      { codigo: 'A', saldo: 1, dias: [{ fecha: '2026-11-18' }] },
+      { codigo: 'M', saldo: 1, dias: [{ fecha: '2026-10-20' }] },
+    ]
+    expect(ordenarCanastasAbiertas(conFechas, 'fechaAntigua').map((fila) => fila.codigo)).toEqual([
+      'M',
+      'Z',
+      'A',
+    ])
+  })
 })
 
 describe('totalesSemana', () => {

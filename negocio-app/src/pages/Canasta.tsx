@@ -1,9 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ArrowLeft, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
+import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpNarrowWide, ArrowLeft, CalendarArrowDown, CalendarArrowUp, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { Aviso } from '../components/Aviso.tsx'
+import { CalendarioRango } from '../components/CalendarioRango.tsx'
 import { CampanaAbono } from '../components/CampanaAbono.tsx'
 import { IndicadorCarga } from '../components/IndicadorCarga.tsx'
 import { Layout } from '../components/Layout.tsx'
@@ -33,7 +34,7 @@ import { formatearDolares } from '../lib/dinero.ts'
 import { mensajeErrorDescarga } from '../lib/errores.ts'
 import { avisoPersistente } from '../lib/feedback.ts'
 import { canastaAbiertaDesdeEstado } from '../lib/navegacion.ts'
-import { armarReporteCanasta } from '../lib/reporteCanasta.ts'
+import { armarReporteCanasta, textoPeriodoReporte, type RangoFechasReporte } from '../lib/reporteCanasta.ts'
 import { descargarReporteExcel } from '../lib/reporteCanastaExcel.ts'
 import { descargarReporteCanastas } from '../lib/reporteCanastaPdf.ts'
 import {
@@ -432,10 +433,20 @@ export function Canasta() {
     subirAlInicio()
   }
 
-  function descargarReporte(formato: 'pdf' | 'excel') {
+  function filasReporte(rango: RangoFechasReporte | null) {
+    return armarReporteCanasta(ordenarCanastasAbiertas(canastas, orden), abonosPorCliente, rango)
+  }
+
+  function descargarReporte(formato: 'pdf' | 'excel', rango: RangoFechasReporte | null) {
     if (errorAbonos || ultimosAbonos == null) return
-    const filas = armarReporteCanasta(ordenarCanastasAbiertas(canastas, orden), abonosPorCliente)
-    const promesa = formato === 'excel' ? descargarReporteExcel(filas) : descargarReporteCanastas(filas)
+    const filas = filasReporte(rango)
+    if (filas.length === 0) {
+      mostrar('Ninguna clienta tiene compras en ese rango.', 'error')
+      return
+    }
+    const periodo = textoPeriodoReporte(rango)
+    const promesa =
+      formato === 'excel' ? descargarReporteExcel(filas, periodo) : descargarReporteCanastas(filas, periodo)
     void promesa
       .then(() => mostrar(formato === 'excel' ? 'Excel descargado.' : 'PDF descargado.', 'ok'))
       .catch(() => mostrar(mensajeErrorDescarga(formato), 'error'))
@@ -482,7 +493,9 @@ export function Canasta() {
               mostrarDescarga={canastas.length > 0}
               puedeDescargar={!errorAbonos && ultimosAbonos != null}
               onHistorial={() => irA('historial')}
+              hayClientas={(rango) => filasReporte(rango).length > 0}
               onDescargar={descargarReporte}
+              onRangoVacio={() => mostrar('Ninguna clienta tiene compras en ese rango.', 'error')}
             />
           ) : null}
 
@@ -667,7 +680,9 @@ function ResumenAbiertas({
   mostrarDescarga,
   puedeDescargar,
   onHistorial,
+  hayClientas,
   onDescargar,
+  onRangoVacio,
 }: {
   acento: string
   total: number
@@ -677,7 +692,9 @@ function ResumenAbiertas({
   mostrarDescarga: boolean
   puedeDescargar: boolean
   onHistorial: () => void
-  onDescargar: (formato: 'pdf' | 'excel') => void
+  hayClientas: (rango: RangoFechasReporte | null) => boolean
+  onDescargar: (formato: 'pdf' | 'excel', rango: RangoFechasReporte | null) => void
+  onRangoVacio: () => void
 }) {
   return (
     <section className="flex flex-col gap-5 rounded-3xl p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:p-8" style={{ backgroundColor: acento }}>
@@ -707,9 +724,12 @@ function ResumenAbiertas({
         </motion.button>
         {mostrarDescarga ? (
           <MenuDescarga
+            acento={acento}
             puedeDescargar={puedeDescargar}
             reducirMovimiento={reducirMovimiento}
+            hayClientas={hayClientas}
             onElegir={onDescargar}
+            onRangoVacio={onRangoVacio}
           />
         ) : null}
       </div>
@@ -718,87 +738,56 @@ function ResumenAbiertas({
 }
 
 function MenuDescarga({
+  acento,
   puedeDescargar,
   reducirMovimiento,
+  hayClientas,
   onElegir,
+  onRangoVacio,
 }: {
+  acento: string
   puedeDescargar: boolean
   reducirMovimiento: boolean | null
-  onElegir: (formato: 'pdf' | 'excel') => void
+  hayClientas: (rango: RangoFechasReporte | null) => boolean
+  onElegir: (formato: 'pdf' | 'excel', rango: RangoFechasReporte | null) => void
+  onRangoVacio: () => void
 }) {
-  const esPc = usePantallaPc()
   const panelId = useId()
   const tituloId = useId()
   const refBoton = useRef<HTMLButtonElement>(null)
   const refPanel = useRef<HTMLDivElement>(null)
   const [abierto, setAbierto] = useState(false)
-  const [caja, setCaja] = useState<{
-    top?: number
-    bottom?: number
-    right: number
-    width: number
-    maxHeight: number
-  } | null>(null)
+  const [paso, setPaso] = useState<'rango' | 'formato'>('rango')
+  const [desde, setDesde] = useState<string | null>(null)
+  const [hasta, setHasta] = useState<string | null>(null)
+  const [rango, setRango] = useState<RangoFechasReporte | null>(null)
   const salto = reducirMovimiento === true
   const transicion = salto ? { duration: 0 } : transicionDesplegar
+  const rangoListo = desde != null && hasta != null
 
   function cerrar() {
     setAbierto(false)
+    setPaso('rango')
+  }
+
+  function irAFormato(siguiente: RangoFechasReporte | null) {
+    if (!hayClientas(siguiente)) {
+      onRangoVacio()
+      return
+    }
+    setRango(siguiente)
+    setPaso('formato')
   }
 
   function elegir(formato: 'pdf' | 'excel') {
-    onElegir(formato)
+    onElegir(formato, rango)
     cerrar()
   }
 
   useEffect(() => {
-    if (!abierto || !esPc) {
-      setCaja(null)
-      return
-    }
-
-    function ubicar() {
-      const boton = refBoton.current?.getBoundingClientRect()
-      if (!boton) return
-      const margen = 8
-      const ancho = Math.max(boton.width, 176)
-      const altoEstimado = 160
-      const espacioAbajo = window.innerHeight - boton.bottom - margen
-      const espacioArriba = boton.top - margen
-      const abrirArriba = espacioAbajo < Math.min(altoEstimado, 160) && espacioArriba > espacioAbajo
-      const maxHeight = Math.max(120, (abrirArriba ? espacioArriba : espacioAbajo) - 8)
-
-      setCaja(
-        abrirArriba
-          ? {
-              bottom: window.innerHeight - boton.top + margen,
-              right: window.innerWidth - boton.right,
-              width: ancho,
-              maxHeight,
-            }
-          : {
-              top: boton.bottom + margen,
-              right: window.innerWidth - boton.right,
-              width: ancho,
-              maxHeight,
-            },
-      )
-    }
-
-    ubicar()
-    window.addEventListener('resize', ubicar)
-    window.addEventListener('scroll', ubicar, true)
-    return () => {
-      window.removeEventListener('resize', ubicar)
-      window.removeEventListener('scroll', ubicar, true)
-    }
-  }, [abierto, esPc])
-
-  useEffect(() => {
     if (!abierto) return
-    if (esPc && !caja) return
     refPanel.current?.querySelector('button')?.focus()
-  }, [abierto, caja, esPc])
+  }, [abierto, paso])
 
   useEffect(() => {
     if (!abierto) return
@@ -810,95 +799,113 @@ function MenuDescarga({
   }, [abierto])
 
   useEffect(() => {
-    if (!abierto || !esPc) return
-    function cerrarClic(evento: Event) {
-      const destino = evento.target
-      if (!(destino instanceof Node)) return
-      if (refBoton.current?.contains(destino) || refPanel.current?.contains(destino)) return
-      cerrar()
-    }
-    document.addEventListener('mousedown', cerrarClic)
-    return () => document.removeEventListener('mousedown', cerrarClic)
-  }, [abierto, esPc])
-
-  useEffect(() => {
     if (!abierto) return
     const boton = refBoton.current
     return () => boton?.focus()
   }, [abierto])
 
-  const opciones = (
-    <>
-      <button type="button" onClick={() => elegir('pdf')} className={`${boton} bg-black text-white`}>
-        PDF
-      </button>
-      <button type="button" onClick={() => elegir('excel')} className={`${boton} bg-black/5`}>
-        Excel
-      </button>
-    </>
-  )
+  const titulo = paso === 'rango' ? 'Elegir fechas' : 'Descargar como'
+  const contenido =
+    paso === 'rango' ? (
+      <>
+        <CalendarioRango
+          acento={acento}
+          desde={desde}
+          hasta={hasta}
+          onCambiar={(seleccion) => {
+            setDesde(seleccion.desde)
+            setHasta(seleccion.hasta)
+          }}
+        />
+        <p className="px-2 text-sm text-black/60">
+          {rangoListo && desde && hasta
+            ? textoPeriodoReporte({ desde, hasta })
+            : 'Toca el inicio y el final del rango.'}
+        </p>
+        <button
+          type="button"
+          disabled={!rangoListo}
+          onClick={() => {
+            if (!desde || !hasta) return
+            irAFormato({
+              desde: desde <= hasta ? desde : hasta,
+              hasta: desde <= hasta ? hasta : desde,
+            })
+          }}
+          className={`${boton} bg-black text-white`}
+        >
+          Aplicar
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setDesde(null)
+            setHasta(null)
+          }}
+          className={`${boton} bg-black/5`}
+        >
+          Limpiar
+        </button>
+        <button type="button" onClick={() => irAFormato(null)} className={`${boton} bg-fondo`}>
+          Toda la canasta
+        </button>
+      </>
+    ) : (
+      <>
+        <button
+          type="button"
+          aria-label="Volver a fechas"
+          onClick={() => setPaso('rango')}
+          className="inline-flex size-8 shrink-0 touch-manipulation items-center justify-center rounded-full bg-black/5 [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+        >
+          <ArrowLeft aria-hidden size={16} strokeWidth={2} />
+        </button>
+        <button type="button" onClick={() => elegir('pdf')} className={`${boton} bg-black text-white`}>
+          PDF
+        </button>
+        <button type="button" onClick={() => elegir('excel')} className={`${boton} bg-black/5`}>
+          Excel
+        </button>
+      </>
+    )
 
   const panel = createPortal(
     <AnimatePresence>
-      {abierto && (!esPc || caja) ? (
-        esPc && caja ? (
+      {abierto ? (
+        <motion.div
+          key="descarga"
+          className="fixed inset-0 z-50 flex items-end justify-center lg:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={tituloId}
+          initial={salto ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={salto ? undefined : { opacity: 0 }}
+          transition={transicion}
+        >
+          <button
+            type="button"
+            aria-label="Cerrar descarga"
+            onClick={cerrar}
+            className="absolute inset-0 bg-black/25"
+          />
           <motion.div
-            key="descarga-pc"
             ref={refPanel}
             id={panelId}
             role="group"
-            aria-label="Descargar como"
-            initial={salto ? false : { opacity: 0, y: caja.bottom != null ? 8 : -8 }}
+            aria-label={titulo}
+            initial={salto ? false : { opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={salto ? undefined : { opacity: 0, y: caja.bottom != null ? 8 : -8 }}
+            exit={salto ? undefined : { opacity: 0, y: 28 }}
             transition={transicion}
-            className="fixed z-50 flex flex-col gap-2 rounded-3xl bg-white p-3 shadow-md"
-            style={{
-              top: caja.top,
-              bottom: caja.bottom,
-              right: caja.right,
-              width: caja.width,
-              maxHeight: caja.maxHeight,
-            }}
+            className="relative z-10 mx-auto flex max-h-[min(92dvh,40rem)] w-full max-w-md flex-col gap-2 overflow-y-auto rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md lg:rounded-3xl lg:p-5"
           >
-            {opciones}
+            <p id={tituloId} className="px-2 pb-1 text-sm text-black/60">
+              {titulo}
+            </p>
+            {contenido}
           </motion.div>
-        ) : (
-          <motion.div
-            key="descarga-movil"
-            className="fixed inset-0 z-50"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={tituloId}
-            initial={salto ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={salto ? undefined : { opacity: 0 }}
-            transition={transicion}
-          >
-            <button
-              type="button"
-              aria-label="Cerrar descarga"
-              onClick={cerrar}
-              className="absolute inset-0 bg-black/25"
-            />
-            <motion.div
-              ref={refPanel}
-              id={panelId}
-              role="group"
-              aria-label="Descargar como"
-              initial={salto ? false : { opacity: 0, y: 28 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={salto ? undefined : { opacity: 0, y: 28 }}
-              transition={transicion}
-              className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-md flex-col gap-2 rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md"
-            >
-              <p id={tituloId} className="px-2 pb-1 text-sm text-black/60">
-                Descargar como
-              </p>
-              {opciones}
-            </motion.div>
-          </motion.div>
-        )
+        </motion.div>
       ) : null}
     </AnimatePresence>,
     document.body,
@@ -912,7 +919,7 @@ function MenuDescarga({
         disabled={!puedeDescargar}
         aria-expanded={abierto}
         aria-controls={panelId}
-        aria-haspopup={esPc ? 'true' : 'dialog'}
+        aria-haspopup="dialog"
         onClick={() => (abierto ? cerrar() : setAbierto(true))}
         className={`${boton} justify-between bg-white text-black lg:w-auto lg:px-6`}
       >
@@ -1599,6 +1606,8 @@ const opcionesOrden: Record<OrdenCanasta, { texto: string; detalle: string; icon
   codigo: { texto: 'A–Z', detalle: 'Por código', icono: ArrowDownAZ },
   saldoMayor: { texto: 'Debe más', detalle: 'Saldo de mayor a menor', icono: ArrowDownWideNarrow },
   saldoMenor: { texto: 'Debe menos', detalle: 'Saldo de menor a mayor', icono: ArrowUpNarrowWide },
+  fechaReciente: { texto: 'Más reciente', detalle: 'Última compra, de nueva a vieja', icono: CalendarArrowDown },
+  fechaAntigua: { texto: 'Más antigua', detalle: 'Última compra, de vieja a nueva', icono: CalendarArrowUp },
 }
 
 function FiltroOrden({
@@ -1668,7 +1677,7 @@ function FiltroOrden({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 28 }}
             transition={transicion}
-            className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-md flex-col gap-2 rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md"
+            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[min(88dvh,40rem)] w-full max-w-md flex-col gap-2 overflow-y-auto rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-md"
           >
             <p id={listaId} className="px-2 pb-1 text-sm text-black/60">
               Ordenar

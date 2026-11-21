@@ -172,20 +172,49 @@ export function ordenarClientesPorEstado<T extends { codigo: string; estado: str
   })
 }
 
-export const ORDENES_CANASTA = ['codigo', 'saldoMayor', 'saldoMenor'] as const
+export const ORDENES_CANASTA = [
+  'codigo',
+  'saldoMayor',
+  'saldoMenor',
+  'fechaReciente',
+  'fechaAntigua',
+] as const
 export type OrdenCanasta = (typeof ORDENES_CANASTA)[number]
 
-/** En Canasta: A–Z, quien debe más o quien debe menos. */
-export function ordenarCanastasAbiertas<T extends { codigo: string; saldo: number }>(
-  filas: T[],
-  orden: OrdenCanasta,
-): T[] {
+/** En Canasta: A–Z, quien debe más o menos, o por la fecha de la última compra. */
+export function ordenarCanastasAbiertas<
+  T extends { codigo: string; saldo: number; dias?: { fecha: string }[] },
+>(filas: T[], orden: OrdenCanasta): T[] {
   return [...filas].sort((a, b) => {
-    if (orden !== 'codigo' && a.saldo !== b.saldo) {
-      return orden === 'saldoMayor' ? b.saldo - a.saldo : a.saldo - b.saldo
+    if (orden === 'saldoMayor' || orden === 'saldoMenor') {
+      if (a.saldo !== b.saldo) {
+        return orden === 'saldoMayor' ? b.saldo - a.saldo : a.saldo - b.saldo
+      }
+    }
+    if (orden === 'fechaReciente' || orden === 'fechaAntigua') {
+      const porFecha = compararFechaVenta(
+        fechaUltimaCompra(a.dias),
+        fechaUltimaCompra(b.dias),
+        orden === 'fechaReciente',
+      )
+      if (porFecha !== 0) return porFecha
     }
     return compararCodigo(a.codigo, b.codigo)
   })
+}
+
+/** dias ya viene del más reciente al más antiguo. */
+function fechaUltimaCompra(dias: { fecha: string }[] | undefined): string {
+  const fecha = dias?.[0]?.fecha?.trim() ?? ''
+  return fecha ? fechaDiaLocal(fecha) : ''
+}
+
+function compararFechaVenta(a: string, b: string, recientePrimero: boolean): number {
+  if (a === b) return 0
+  if (!a) return 1
+  if (!b) return -1
+  if (recientePrimero) return a < b ? 1 : -1
+  return a < b ? -1 : 1
 }
 
 function compararCodigo(a: string, b: string): number {
